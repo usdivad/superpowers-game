@@ -21,3 +21,8 @@ SupCore.system.registerPlugin<SupCore.TypeScriptAPIPlugin>("typescriptAPI", "Sup
   code: fs.readFileSync(`${__dirname}/Sup.Audio.MultiSoundPlayer.ts.txt`, { encoding: "utf8" }),
   defs: fs.readFileSync(`${__dirname}/Sup.Audio.MultiSoundPlayer.d.ts.txt`, { encoding: "utf8" })
 });
+
+SupCore.system.registerPlugin<SupCore.TypeScriptAPIPlugin>("typescriptAPI", "Sup.Audio.Conductor", {
+  code: fs.readFileSync(`${__dirname}/Sup.Audio.Conductor.ts.txt`, { encoding: "utf8" }),
+  defs: fs.readFileSync(`${__dirname}/Sup.Audio.Conductor.d.ts.txt`, { encoding: "utf8" })
+});

@@ -3,20 +3,45 @@ namespace Sup {
         export class MultiSoundPlayer {
             init: SoundPlayer;
             loop: SoundPlayer;
-            tails: Array<SoundPlayer>;
+            tails: Array<any>;
+            soundPlayers: any;
             volume: number;
+            playMode: string; // init, loop, tail
 
-            constructor(init: string|Sound, loop: string|Sound, tails: Array<string>|Array<Sound>, volume=1.0, options?: { loop?: boolean; pitch?: number; pan?: number; }) {
+            constructor(init: string|Sound, loop: string|Sound, tails: Array<any>, volume=1.0, options?: { loop?: boolean; pitch?: number; pan?: number; }) {
                 this.init = new SoundPlayer(init, volume, options);
-                this.loop = new SoundPlayer(loop, volume, options);
+                this.loop = new SoundPlayer(loop, volume, {loop: true});
+
+                // for multiple tails corresponding to multiple beats
                 this.tails = [];
 
                 for (var i = 0; i < tails.length; i++) {
-                    let tail = new SoundPlayer(tails[i], volume, options);
-                    this.tails.push(tail);
+                    let tailAudio = new SoundPlayer(tails[i].audio, volume, options);
+                    let beat = tails[i].beat;
+                    this.tails.push({
+                        audio: tailAudio,
+                        beat: beat
+                    });
                 }
 
                 this.volume = volume;
+
+                this.soundPlayers = {
+                    init: this.init,
+                    loop: this.loop,
+                    tails: this.tails
+                };
+
+                this.playMode = "init";
+            }
+
+            play(beatNum=0) {
+                if (this.playMode != "tail") {
+                    this.soundPlayers[this.playMode].play();
+                }
+                else {
+                    this.soundPlayers["tails"][beatNum].play();
+                }
             }
         }
     }

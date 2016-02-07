@@ -1,7 +1,15 @@
-namespace Sup {
+declare namespace Sup {
     namespace Audio {
         class Conductor {
+            constructor(bpm: number, timesig: number, transitionBeats: Array<number>, players: any);
+            getPlayer(playerName): MultiSoundPlayer | SoundPlayer;
+            start();
+            stop();
+            updateBeatTimes();
+        }
 
+        namespace Conductor {
+            function calculateNextBeatTime(currentBeatTime: number, bpm: number): number;
         }
     }
 }

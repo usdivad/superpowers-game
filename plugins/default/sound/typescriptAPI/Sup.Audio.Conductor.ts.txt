@@ -1,7 +1,69 @@
 namespace Sup {
-    namespace Audio {
-        class Conductor {
+    export namespace Audio {
+        export class Conductor {
+            bpm: number;
+            timesig: number;
+            currentBeat: number;
+            transitionBeats: Array<number>;
+            players: any; // dictionary of players
+            ctx: any; // audio context
+            currentBeatTime: number;
+            nextBeatTime: number;
+            lookaheadTime: number;
+            active: boolean;
 
+            constructor(bpm: number, timesig: number, transitionBeats: Array<number>, players: any) {
+                this.bpm = bpm;
+                this.timesig = timesig;
+                this.currentBeat = 0;
+                this.transitionBeats = transitionBeats;
+                this.players = players;
+
+                this.ctx = player.gameInstance.audio.getContext();
+                this.currentBeatTime = this.ctx.currentTime;
+                this.updateBeatTimes();
+
+                this.lookaheadTime = 0;
+                this.active = false;
+            }
+
+            getPlayer(playerName): MultiSoundPlayer | SoundPlayer {
+                return this.players[playerName];
+            }
+
+            start() {
+                this.currentBeatTime = this.ctx.currentTime;
+                this.active = true;
+                while(this.active && this.nextBeatTime < this.ctx.currentTime + this.lookaheadTime) {
+                    this.currentBeat = (this.currentBeat + 1) % this.timesig;
+                    this.updateBeatTimes();
+                    Sup.log(this.currentBeat);
+                }
+            }
+
+            stop() {
+                this.active = false;
+            }
+
+            updateBeatTimes() {
+                let nextBeatTime = Sup.Audio.Conductor.calculateNextBeatTime(this.currentBeatTime, this.bpm);
+                this.currentBeatTime = this.nextBeatTime;
+                this.nextBeatTime = nextBeatTime;
+            }
+
+            // calculateNextBeatTime(currentBeatTime: number, bpm: number): number {
+            //     return currentBeatTime + ((60 / bpm) * 1000);
+            // }
+        }
+
+        export namespace Conductor {
+            export function calculateNextBeatTime(currentBeatTime: number, bpm: number): number {
+                return currentBeatTime + ((60 / bpm) * 1000);
+            }
+
+            // static bpmToMs(bpm) {
+            //     return (60/bpm)*1000;
+            // }
         }
     }
 }
