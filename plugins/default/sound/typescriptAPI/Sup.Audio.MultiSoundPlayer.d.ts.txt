@@ -1,0 +1,7 @@
+declare namespace Sup {
+    namespace Audio {
+        class MultiSoundPlayer {
+            constructor(init: string|Sound, loop: string|Sound, tails: Array<string>|Array<Sound>, volume: number /* 1.0 */, options?: { loop?: boolean; pitch?: number; pan?: number; });
+        }
+    }
+}

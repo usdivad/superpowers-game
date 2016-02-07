@@ -1,0 +1,23 @@
+namespace Sup {
+    export namespace Audio {
+        export class MultiSoundPlayer {
+            init: SoundPlayer;
+            loop: SoundPlayer;
+            tails: Array<SoundPlayer>;
+            volume: number;
+
+            constructor(init: string|Sound, loop: string|Sound, tails: Array<string>|Array<Sound>, volume=1.0, options?: { loop?: boolean; pitch?: number; pan?: number; }) {
+                this.init = new SoundPlayer(init, volume, options);
+                this.loop = new SoundPlayer(loop, volume, options);
+                this.tails = [];
+
+                for (var i = 0; i < tails.length; i++) {
+                    let tail = new SoundPlayer(tails[i], volume, options);
+                    this.tails.push(tail);
+                }
+
+                this.volume = volume;
+            }
+        }
+    }
+}

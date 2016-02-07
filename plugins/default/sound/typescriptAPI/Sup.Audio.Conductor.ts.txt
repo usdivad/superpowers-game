@@ -1,0 +1,7 @@
+namespace Sup {
+    namespace Audio {
+        class Conductor {
+
+        }
+    }
+}
