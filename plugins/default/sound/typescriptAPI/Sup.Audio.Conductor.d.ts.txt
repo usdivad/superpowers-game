@@ -5,7 +5,7 @@ declare namespace Sup {
             getPlayer(playerName): MultiSoundPlayer | SoundPlayer;
             start();
             stop();
-            updateBeatTimes();
+            updateNextBeatTime();
         }
 
         namespace Conductor {

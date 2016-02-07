@@ -1,64 +1,102 @@
+/*
+ * A class that schedules audio events, in the form of MultiSoundPlayers,
+ * based on beats according to an internal metronome.
+ *
+ * The metronome is an interval that uses the Web Audio API's clock for timing.
+ *
+ */
+
 namespace Sup {
     export namespace Audio {
         export class Conductor {
             bpm: number;
             timesig: number;
-            currentBeat: number;
+            beatNum: number;
             transitionBeats: Array<number>;
             players: any; // dictionary of players
             ctx: any; // audio context
-            currentBeatTime: number;
             nextBeatTime: number;
             lookaheadTime: number;
             active: boolean;
+            interval: any; // the internal metronome
 
+            /*
+                Constructs a Conductor.
+
+                - bpm -> beats per minute
+                - timesig -> time signature (how many beats in a cycle)
+                - transitionBeats -> list of beat numbers at which a transition is possible (based on players' tails)
+                - players -> a dictionary of MultiSoundPlayers
+            */
             constructor(bpm: number, timesig: number, transitionBeats: Array<number>, players: any) {
+                // set default params
+                this.beatNum = 0;
+                this.lookaheadTime = 0;
+                this.active = false;
+
+                // set params passed in
                 this.bpm = bpm;
                 this.timesig = timesig;
-                this.currentBeat = 0;
                 this.transitionBeats = transitionBeats;
                 this.players = players;
 
+                // create audio context and setup beat time
                 this.ctx = player.gameInstance.audio.getContext();
-                this.currentBeatTime = this.ctx.currentTime;
-                this.updateBeatTimes();
-
-                this.lookaheadTime = 0;
-                this.active = false;
+                this.nextBeatTime = this.ctx.currentTime;
+                // this.updateNextBeatTime();
             }
 
             getPlayer(playerName): MultiSoundPlayer | SoundPlayer {
                 return this.players[playerName];
             }
 
+            /*
+                Begin the Conductor's scheduling.
+            */
             start() {
-                this.currentBeatTime = this.ctx.currentTime;
+                let conductor = this;
+
+                Sup.log("started");
+                // this.nextBeatTime = this.ctx.currentTime;
                 this.active = true;
-                while(this.active && this.nextBeatTime < this.ctx.currentTime + this.lookaheadTime) {
-                    this.currentBeat = (this.currentBeat + 1) % this.timesig;
-                    this.updateBeatTimes();
-                    Sup.log(this.currentBeat);
-                }
+
+                // set the interval that increments beat number
+                this.interval = Sup.setInterval(10, function() {
+                    if (conductor.nextBeatTime < conductor.ctx.currentTime + conductor.lookaheadTime) {
+                        conductor.updateNextBeatTime();
+                        Sup.log(conductor.beatNum);
+                        conductor.beatNum = (conductor.beatNum + 1) % conductor.timesig;
+                    }
+                });
             }
 
+            /*
+                Stop the Conductor and reset params for next start().
+            */
             stop() {
                 this.active = false;
+                Sup.clearInterval(this.interval);
+                this.beatNum = 0;
+                Sup.log("stopped " + this.interval);
             }
 
-            updateBeatTimes() {
-                let nextBeatTime = Sup.Audio.Conductor.calculateNextBeatTime(this.currentBeatTime, this.bpm);
-                this.currentBeatTime = this.nextBeatTime;
+            /*
+                Update the next beat time based on the latest beat time and BPM.
+            */
+            updateNextBeatTime() {
+                let nextBeatTime = Sup.Audio.Conductor.calculateNextBeatTime(this.nextBeatTime, this.bpm);
+                // Sup.log(this.nextBeatTime + " -> " + nextBeatTime);
                 this.nextBeatTime = nextBeatTime;
             }
-
-            // calculateNextBeatTime(currentBeatTime: number, bpm: number): number {
-            //     return currentBeatTime + ((60 / bpm) * 1000);
-            // }
         }
 
         export namespace Conductor {
-            export function calculateNextBeatTime(currentBeatTime: number, bpm: number): number {
-                return currentBeatTime + ((60 / bpm) * 1000);
+
+            /*
+                Return the next beat time (in seconds).
+            */
+            export function calculateNextBeatTime(beatTime: number, bpm: number): number {
+                return beatTime + (60 / bpm);
             }
 
             // static bpmToMs(bpm) {
