@@ -10,28 +10,26 @@ namespace Sup {
         export class MultiSoundPlayer {
             init: SoundPlayer;
             loop: SoundPlayer;
-            tails: Array<any>;
+            tails: any;
             soundPlayers: any;
             volume: number;
             playMode: string; // init, loop, tail
+            initPlayed: boolean;
 
             /*
                 Constructs a MultiSoundPlayer.
             */
             constructor(init: string|Sound, loop: string|Sound, tails: Array<any>, volume=1.0, options?: { loop?: boolean; pitch?: number; pan?: number; }) {
                 this.init = new SoundPlayer(init, volume, options);
+                // this.loop = new SoundPlayer(loop, volume, options);
                 this.loop = new SoundPlayer(loop, volume, {loop: true});
 
                 // for multiple tails corresponding to multiple beats
-                this.tails = [];
+                this.tails = {};
 
-                for (var i = 0; i < tails.length; i++) {
-                    let tailAudio = new SoundPlayer(tails[i].audio, volume, options);
-                    let beat = tails[i].beat;
-                    this.tails.push({
-                        audio: tailAudio,
-                        beat: beat
-                    });
+                for (var beatNum in tails) {
+                    let tailAudio = tails[beatNum];
+                    this.tails[beatNum] = new SoundPlayer(tailAudio, volume, options);
                 }
 
                 this.volume = volume;
@@ -43,6 +41,7 @@ namespace Sup {
                 };
 
                 this.playMode = "init";
+                this.initPlayed = false;
             }
 
             /*
@@ -55,6 +54,32 @@ namespace Sup {
                 else {
                     this.soundPlayers["tails"][beatNum].play();
                 }
+            }
+
+            // NOTE that calling play() on SoundPlayer won't do anything if it's
+            // already playing, so loops should be set to {loop: true}
+            playInitOrLoop() {
+                if (this.initPlayed) {
+                    this.soundPlayers.loop.play();
+                    Sup.log("playing loop");
+                }
+                else {
+                    this.soundPlayers.init.play();
+                    this.initPlayed = true;
+                    Sup.log("playing init");
+                }
+            }
+
+            playTail(beatNum=0) {
+                this.soundPlayers.loop.setLoop(false); // stop loop from continuing
+                this.soundPlayers.tails[beatNum].play(); // play tail sample
+                Sup.log("playing tail");
+
+            }
+
+            reset() {
+                this.playMode = "init";
+                this.initPlayed = false;
             }
         }
     }

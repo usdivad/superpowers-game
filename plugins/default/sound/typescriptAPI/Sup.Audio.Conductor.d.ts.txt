@@ -6,6 +6,10 @@ declare namespace Sup {
             start();
             stop();
             updateNextBeatTime();
+            playAllInitOrLoop();
+            playAllTails(beatNum: number);
+            resetAllPlayers();
+            setTransition(transition: boolean);
         }
 
         namespace Conductor {

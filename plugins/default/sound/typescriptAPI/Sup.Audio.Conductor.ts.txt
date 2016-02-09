@@ -1,8 +1,7 @@
 /*
  * A class that schedules audio events, in the form of MultiSoundPlayers,
- * based on beats according to an internal metronome.
- *
- * The metronome is an interval that uses the Web Audio API's clock for timing.
+ * based on beats per phrase according to an internal metronome/interval that
+ * uses the Web Audio API's clock for timing.
  *
  */
 
@@ -10,9 +9,10 @@ namespace Sup {
     export namespace Audio {
         export class Conductor {
             bpm: number;
-            timesig: number;
+            timesig: number; // beats per phrase
             beatNum: number;
             transitionBeats: Array<number>;
+            transition: boolean;
             players: any; // dictionary of players
             ctx: any; // audio context
             nextBeatTime: number;
@@ -33,6 +33,7 @@ namespace Sup {
                 this.beatNum = 0;
                 this.lookaheadTime = 0;
                 this.active = false;
+                this.transition = false;
 
                 // set params passed in
                 this.bpm = bpm;
@@ -60,11 +61,35 @@ namespace Sup {
                 // this.nextBeatTime = this.ctx.currentTime;
                 this.active = true;
 
-                // set the interval that increments beat number
+                // set the interval and handle beats + players
                 this.interval = Sup.setInterval(10, function() {
                     if (conductor.nextBeatTime < conductor.ctx.currentTime + conductor.lookaheadTime) {
                         conductor.updateNextBeatTime();
                         Sup.log(conductor.beatNum);
+
+                        if (conductor.transition) {
+                            let beatIndex = conductor.transitionBeats.indexOf(conductor.beatNum);
+                            if (beatIndex >= 0) { // transition beat
+                                conductor.playAllTails(conductor.beatNum);
+                                // conductor.active = false;
+
+                                // either do nothing OR begin next section
+                                // depending on active settings
+
+                                Sup.log("playing tails for beat " + conductor.beatNum);
+                            }
+                            else {
+                                Sup.log("sorry, no tails found for beat " + conductor.beatNum);
+                            }
+                        } else {
+                            if (conductor.beatNum == 0) { // downbeat
+                                conductor.playAllInitOrLoop();
+
+                                Sup.log("playing downbeat!");
+                            }
+                        }
+
+                        // increment the beat number
                         conductor.beatNum = (conductor.beatNum + 1) % conductor.timesig;
                     }
                 });
@@ -77,7 +102,9 @@ namespace Sup {
                 this.active = false;
                 Sup.clearInterval(this.interval);
                 this.beatNum = 0;
+                this.transition = false;
                 Sup.log("stopped " + this.interval);
+                this.resetAllPlayers();
             }
 
             /*
@@ -88,6 +115,32 @@ namespace Sup {
                 // Sup.log(this.nextBeatTime + " -> " + nextBeatTime);
                 this.nextBeatTime = nextBeatTime;
             }
+
+            playAllInitOrLoop() {
+                for (var pk in this.players) {
+                    let player = this.players[pk];
+                    player.playInitOrLoop();
+                }
+            }
+
+            playAllTails(beatNum: number) {
+                for (var pk in this.players) {
+                    let player = this.players[pk];
+                    player.playTail(beatNum);
+                }
+            }
+
+            resetAllPlayers() {
+                for (var pk in this.players) {
+                    let player = this.players[pk];
+                    player.reset();
+                }
+            }
+
+            setTransition(transition: boolean) {
+                this.transition = transition;
+            }
+
         }
 
         export namespace Conductor {
