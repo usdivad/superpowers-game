@@ -40,7 +40,7 @@ namespace Sup {
                 // this.updateNextBeatTime();
             }
 
-            initializeParams(params: any) {
+            initializeParams(params: {bpm: number, timesig: number, players: any}) {
                 // set default params
                 this.beatNum = 0;
                 this.lookaheadTime = 0;
@@ -94,21 +94,24 @@ namespace Sup {
                                 // depending on active settings
                                 if (conductor.toNext) {
                                     conductor.initializeParams(conductor.nextParams);
+                                    conductor.resetAllPlayers();
                                 }
                                 else { // stop
                                     conductor.stop();
                                 }
 
                                 Sup.log("playing tails for beat " + conductor.beatNum);
+                                conductor.beatNum = -1;
                             }
                             else {
-                                Sup.log("sorry, no tails found for beat " + conductor.beatNum);
+                                // Sup.log("sorry, no tails found for beat " + conductor.beatNum);
                             }
                         } else {
-                            if (conductor.beatNum == 0) { // downbeat
+                            if (conductor.beatNum <= 0) { // downbeat (allow -1 for toNexts)
                                 conductor.playAllInitOrLoop();
 
                                 Sup.log("playing downbeat!");
+                                Sup.log(conductor.players);
                             }
                         }
 

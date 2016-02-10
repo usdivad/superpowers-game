@@ -2,7 +2,7 @@ declare namespace Sup {
     namespace Audio {
         class Conductor {
             constructor(bpm: number, timesig: number, players: any);
-            initializeParams(params: any);
+            initializeParams(params: {bpm: number, timesig: number, players: any});
             getPlayer(playerName: string): MultiSoundPlayer | SoundPlayer;
             start();
             stop();
