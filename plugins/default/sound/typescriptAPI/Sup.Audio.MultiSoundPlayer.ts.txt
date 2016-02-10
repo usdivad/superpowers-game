@@ -20,17 +20,21 @@ namespace Sup {
             /*
                 Constructs a MultiSoundPlayer.
             */
-            constructor(init: string | Sound, loop: string | Sound, tails: Array<any>, volume = 1.0, options?: { loop?: boolean; pitch?: number; pan?: number; active?: boolean;}) {
+            constructor(init: string | Sound, loop: string | Sound, tails: any /* object or string */, volume = 1.0, options?: { loop?: boolean; pitch?: number; pan?: number; active?: boolean;}) {
                 this.init = new SoundPlayer(init, volume, options);
                 // this.loop = new SoundPlayer(loop, volume, options);
                 this.loop = new SoundPlayer(loop, volume, {loop: true});
 
                 // for multiple tails corresponding to multiple beats
                 this.tails = {};
-
-                for (var beatNum in tails) {
-                    let tailAudio = tails[beatNum];
-                    this.tails[beatNum] = new SoundPlayer(tailAudio, volume, options);
+                if (typeof tails == "object") {
+                    for (var beatNum in tails) {
+                        let tailAudio = tails[beatNum];
+                        this.tails[beatNum] = new SoundPlayer(tailAudio, volume, options);
+                    }
+                }
+                else if (typeof tails == "string" || typeof tails == "Sound") { // default to beat 0
+                    this.tails[0] = new SoundPlayer(tails, volume, options);
                 }
 
                 this.volume = volume;
