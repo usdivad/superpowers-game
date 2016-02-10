@@ -19,32 +19,49 @@ namespace Sup {
             lookaheadTime: number;
             active: boolean;
             interval: any; // the internal metronome
+            
+            toNext: boolean;
+            nextParams: any; // bpm, timesig, players
 
             /*
                 Constructs a Conductor.
 
                 - bpm -> beats per minute
                 - timesig -> time signature (how many beats in a cycle)
-                - transitionBeats -> list of beat numbers at which a transition is possible (based on players' tails)
                 - players -> a dictionary of MultiSoundPlayers
             */
-            constructor(bpm: number, timesig: number, transitionBeats: Array<number>, players: any) {
-                // set default params
-                this.beatNum = 0;
-                this.lookaheadTime = 0;
-                this.active = false;
-                this.transition = false;
-
-                // set params passed in
-                this.bpm = bpm;
-                this.timesig = timesig;
-                this.transitionBeats = transitionBeats;
-                this.players = players;
+            constructor(bpm: number, timesig: number, players: any) {
+                // initialize parameters
+                this.initializeParams({bpm, timesig, players});
 
                 // create audio context and setup beat time
                 this.ctx = player.gameInstance.audio.getContext();
                 this.nextBeatTime = this.ctx.currentTime;
                 // this.updateNextBeatTime();
+            }
+
+            initializeParams(params: any) {
+                // set default params
+                this.beatNum = 0;
+                this.lookaheadTime = 0;
+                this.active = false;
+                this.transition = false;
+                this.toNext = false;
+                this.nextParams = {};
+
+                // set params passed in
+                this.bpm = params.bpm;
+                this.timesig = params.timesig;
+                this.transitionBeats = [];
+                this.players = params.players;
+
+                // get transition beats from players' tails
+                for (var pk in this.players) {
+                    let player = this.players[pk];
+                    for (var beat in player.tails) {
+                        this.transitionBeats.push(parseInt(beat));
+                    }
+                }
             }
 
             getPlayer(playerName): MultiSoundPlayer | SoundPlayer {
@@ -75,6 +92,12 @@ namespace Sup {
 
                                 // either do nothing OR begin next section
                                 // depending on active settings
+                                if (conductor.toNext) {
+                                    conductor.initializeParams(conductor.nextParams);
+                                }
+                                else { // stop
+                                    conductor.stop();
+                                }
 
                                 Sup.log("playing tails for beat " + conductor.beatNum);
                             }
@@ -112,6 +135,7 @@ namespace Sup {
             */
             updateNextBeatTime() {
                 let nextBeatTime = Sup.Audio.Conductor.calculateNextBeatTime(this.nextBeatTime, this.bpm);
+                Sup.log(this.bpm);
                 // Sup.log(this.nextBeatTime + " -> " + nextBeatTime);
                 this.nextBeatTime = nextBeatTime;
             }
@@ -139,6 +163,22 @@ namespace Sup {
 
             setTransition(transition: boolean) {
                 this.transition = transition;
+            }
+
+            setNextParams(params: {bpm: number, timesig: number, players: any}) {
+                this.nextParams = params;
+            }
+
+            setToNext(toNext: boolean) {
+                this.toNext = toNext;
+            }
+
+            activatePlayer(playerName: string) {
+                this.players[playerName].activate();
+            }
+
+            deactivatePlayer(playerName: string) {
+                this.players[playerName].deactivate();
             }
 
         }

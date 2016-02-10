@@ -11,15 +11,16 @@ namespace Sup {
             init: SoundPlayer;
             loop: SoundPlayer;
             tails: any;
-            soundPlayers: any;
+            // soundPlayers: any;
             volume: number;
             playMode: string; // init, loop, tail
             initPlayed: boolean;
+            active: boolean;
 
             /*
                 Constructs a MultiSoundPlayer.
             */
-            constructor(init: string|Sound, loop: string|Sound, tails: Array<any>, volume=1.0, options?: { loop?: boolean; pitch?: number; pan?: number; }) {
+            constructor(init: string | Sound, loop: string | Sound, tails: Array<any>, volume = 1.0, options?: { loop?: boolean; pitch?: number; pan?: number; active?: boolean;}) {
                 this.init = new SoundPlayer(init, volume, options);
                 // this.loop = new SoundPlayer(loop, volume, options);
                 this.loop = new SoundPlayer(loop, volume, {loop: true});
@@ -34,52 +35,83 @@ namespace Sup {
 
                 this.volume = volume;
 
-                this.soundPlayers = {
-                    init: this.init,
-                    loop: this.loop,
-                    tails: this.tails
-                };
+                // this.soundPlayers = {
+                //     init: this.init,
+                //     loop: this.loop,
+                //     tails: this.tails
+                // };
 
                 this.playMode = "init";
                 this.initPlayed = false;
+
+                this.active = true;
+                if (options) {
+                    if ("active" in options) {
+                        this.active = options.active;
+                    }
+                }
             }
 
             /*
                 Play the appropriate sound (init, loop, or tail).
             */
             play(beatNum=0) {
-                if (this.playMode != "tail") {
-                    this.soundPlayers[this.playMode].play();
-                }
-                else {
-                    this.soundPlayers["tails"][beatNum].play();
+                if (this.active) {
+                    if (this.playMode == "init") {
+                        this.init.play();
+                    }
+                    else if (this.playMode == "loop") {
+                        this.loop.play();
+                    }
+                    else if (this.playMode == "tail") {
+                        this.tails[beatNum].play();
+                    }
+                    else {
+                        Sup.log(this.playMode + " is not a valid playMode");
+                    }
                 }
             }
 
             // NOTE that calling play() on SoundPlayer won't do anything if it's
             // already playing, so loops should be set to {loop: true}
             playInitOrLoop() {
-                if (this.initPlayed) {
-                    this.soundPlayers.loop.play();
-                    Sup.log("playing loop");
-                }
-                else {
-                    this.soundPlayers.init.play();
-                    this.initPlayed = true;
-                    Sup.log("playing init");
+                if (this.active) {
+                    if (this.initPlayed) {
+                        this.loop.play();
+                        Sup.log("playing loop");
+                    }
+                    else {
+                        this.init.play();
+                        this.initPlayed = true;
+                        Sup.log("playing init");
+                        this.playMode = "loop";
+                    }
                 }
             }
 
             playTail(beatNum=0) {
-                this.soundPlayers.loop.setLoop(false); // stop loop from continuing
-                this.soundPlayers.tails[beatNum].play(); // play tail sample
-                Sup.log("playing tail");
+                if (this.active) {
+                    this.loop.setLoop(false); // stop loop from continuing
+                    this.tails[beatNum].play(); // play tail sample
+                    Sup.log("playing tail");
+                }
+            }
 
+            setPlayMode(playMode: string) {
+                this.playMode = playMode;
             }
 
             reset() {
                 this.playMode = "init";
                 this.initPlayed = false;
+            }
+
+            activate() {
+                this.active = true;
+            }
+
+            deactivate() {
+                this.active = false;
             }
         }
     }

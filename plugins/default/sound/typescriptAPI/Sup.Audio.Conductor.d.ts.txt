@@ -1,15 +1,20 @@
 declare namespace Sup {
     namespace Audio {
         class Conductor {
-            constructor(bpm: number, timesig: number, transitionBeats: Array<number>, players: any);
-            getPlayer(playerName): MultiSoundPlayer | SoundPlayer;
+            constructor(bpm: number, timesig: number, players: any);
+            initializeParams(params: any);
+            getPlayer(playerName: string): MultiSoundPlayer | SoundPlayer;
             start();
             stop();
             updateNextBeatTime();
             playAllInitOrLoop();
             playAllTails(beatNum: number);
             resetAllPlayers();
+            setNextParams(params: {bpm: number, timesig: number, players: any});
+            setToNext(toNext: boolean);
             setTransition(transition: boolean);
+            activatePlayer(playerName: string);
+            deactivatePlayer(playerName: string);
         }
 
         namespace Conductor {
