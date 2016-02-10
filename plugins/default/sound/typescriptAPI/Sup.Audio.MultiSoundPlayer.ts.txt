@@ -15,6 +15,7 @@ namespace Sup {
             volume: number;
             playMode: string; // init, loop, tail
             initPlayed: boolean;
+            tailPlayed: boolean;
             active: boolean;
 
             /*
@@ -47,6 +48,7 @@ namespace Sup {
 
                 this.playMode = "init";
                 this.initPlayed = false;
+                this.tailPlayed = false;
 
                 this.active = true;
                 if (options) {
@@ -65,7 +67,9 @@ namespace Sup {
                         this.init.play();
                     }
                     else if (this.playMode == "loop") {
-                        this.loop.play();
+                        if (!this.loop.isPlaying()) {
+                            this.loop.play();
+                        }
                     }
                     else if (this.playMode == "tail") {
                         this.tails[beatNum].play();
@@ -78,7 +82,7 @@ namespace Sup {
 
             // NOTE that calling play() on SoundPlayer won't do anything if it's
             // already playing, so loops should be set to {loop: true}
-            playInitOrLoop() {
+            playInitOrLoop(beatNum=0) {
                 if (this.active) {
                     if (this.initPlayed) {
                         this.loop.play();
@@ -91,12 +95,18 @@ namespace Sup {
                         this.playMode = "loop";
                     }
                 }
+                // else {
+                //     if (!this.tailPlayed) {
+                //         this.playTail(beatNum);
+                //     }
+                // }
             }
 
             playTail(beatNum=0) {
                 if (this.active) {
                     this.loop.setLoop(false); // stop loop from continuing
                     this.tails[beatNum].play(); // play tail sample
+                    this.tailPlayed = true;
                     Sup.log("playing tail");
                 }
             }
@@ -108,6 +118,7 @@ namespace Sup {
             reset() {
                 this.playMode = "init";
                 this.initPlayed = false;
+                this.tailPlayed = false;
             }
 
             activate() {

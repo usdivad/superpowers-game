@@ -8,7 +8,7 @@ declare namespace Sup {
             stop();
             updateNextBeatTime();
             playAllInitOrLoop();
-            playAllTails(beatNum: number);
+            playAllTails();
             resetAllPlayers();
             setNextParams(params: {bpm: number, timesig: number, players: any});
             setToNext(toNext: boolean);
