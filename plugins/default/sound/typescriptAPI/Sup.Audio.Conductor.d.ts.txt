@@ -3,18 +3,26 @@ declare namespace Sup {
         class Conductor {
             constructor(bpm: number, timesig: number, players: any);
             initializeParams(params: {bpm: number, timesig: number, players: any});
-            getPlayer(playerName: string): MultiSoundPlayer | SoundPlayer;
+            
             start();
             stop();
-            updateNextBeatTime();
+
             playAllInitOrLoop();
             playAllTails();
+
+            getPlayer(playerName: string): MultiSoundPlayer | SoundPlayer;
             resetAllPlayers();
+            
             setNextParams(params: {bpm: number, timesig: number, players: any});
             setToNext(toNext: boolean);
             setTransition(transition: boolean);
+            
             activatePlayer(playerName: string);
             deactivatePlayer(playerName: string);
+            
+            updateNextBeatTime();
+            getSecondsLeftUntilNextDownbeat(): number;
+            getMillisecondsLeftUntilNextDownbeat(): number;
         }
 
         namespace Conductor {

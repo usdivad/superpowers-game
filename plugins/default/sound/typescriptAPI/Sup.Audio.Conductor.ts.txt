@@ -93,15 +93,16 @@ namespace Sup {
                                 // either do nothing OR begin next section
                                 // depending on active settings
                                 if (conductor.toNext) {
-                                    conductor.initializeParams(conductor.nextParams);
-                                    conductor.resetAllPlayers();
+                                    conductor.resetAllPlayers(); // reset current players
+                                    conductor.initializeParams(conductor.nextParams); // then load next ones
+                                    // conductor.resetAllPlayers();
                                 }
                                 else { // stop
                                     conductor.stop();
                                 }
 
                                 Sup.log("playing tails for beat " + conductor.beatNum);
-                                conductor.beatNum = -1;
+                                conductor.beatNum = -1; // hacky
                             }
                             else {
                                 // Sup.log("sorry, no tails found for beat " + conductor.beatNum);
@@ -183,6 +184,17 @@ namespace Sup {
             deactivatePlayer(playerName: string) {
                 this.players[playerName].deactivate();
                 this.players[playerName].reset();
+            }
+
+            getSecondsLeftUntilNextDownbeat(): number {
+                let beatsLeft = this.timesig - (this.beatNum % this.timesig);
+                let secondsLeft = Conductor.calculateNextBeatTime(0, this.bpm) * beatsLeft;
+                // return secondsLeft * 1000;
+                return secondsLeft;
+            }
+
+            getMillisecondsLeftUntilNextDownbeat(): number {
+                return this.getSecondsLeftUntilNextDownbeat() * 1000;
             }
 
         }

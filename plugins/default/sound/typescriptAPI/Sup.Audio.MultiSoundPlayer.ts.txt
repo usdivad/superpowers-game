@@ -23,8 +23,8 @@ namespace Sup {
             */
             constructor(init: string | Sound, loop: string | Sound, tails: any /* object or string */, volume = 1.0, options?: { loop?: boolean; pitch?: number; pan?: number; active?: boolean;}) {
                 this.init = new SoundPlayer(init, volume, options);
-                // this.loop = new SoundPlayer(loop, volume, options);
-                this.loop = new SoundPlayer(loop, volume, {loop: true});
+                this.loop = new SoundPlayer(loop, volume, options);
+                // this.loop = new SoundPlayer(loop, volume, {loop: true});
 
                 // for multiple tails corresponding to multiple beats
                 this.tails = {};
@@ -62,31 +62,38 @@ namespace Sup {
                 Play the appropriate sound (init, loop, or tail).
             */
             play(beatNum=0) {
-                if (this.active) {
-                    if (this.playMode == "init") {
-                        this.init.play();
-                    }
-                    else if (this.playMode == "loop") {
-                        if (!this.loop.isPlaying()) {
-                            this.loop.play();
-                        }
-                    }
-                    else if (this.playMode == "tail") {
-                        this.tails[beatNum].play();
-                    }
-                    else {
-                        Sup.log(this.playMode + " is not a valid playMode");
-                    }
-                }
+                Sup.log("please use playInitOrLoop() or playTail()");
+                
+                // if (this.active) {
+                //     if (this.playMode == "init") {
+                //         this.init.play();
+                //     }
+                //     else if (this.playMode == "loop") {
+                //         if (!this.loop.getLoop() || !this.loop.isPlaying()) {
+                //             this.loop.play();
+                //         }
+                //     }
+                //     else if (this.playMode == "tail") {
+                //         this.tails[beatNum].play();
+                //     }
+                //     else {
+                //         Sup.log(this.playMode + " is not a valid playMode");
+                //     }
+                // }
             }
 
-            // NOTE that calling play() on SoundPlayer won't do anything if it's
-            // already playing, so loops should be set to {loop: true}
             playInitOrLoop(beatNum=0) {
                 if (this.active) {
                     if (this.initPlayed) {
-                        this.loop.play();
-                        Sup.log("playing loop");
+                        if (!this.loop.getLoop()) { // {loop: false}; retrigger every time
+                            this.loop.stop(); // calling play() on SoundPlayer won't do anything if it's already playing, so we must stop it first
+                            this.loop.play();
+                            Sup.log("playing loop");
+                        }
+                        else if (!this.loop.isPlaying) { // {loop: true}; only play if it's not already playing
+                            this.loop.play();
+                            Sup.log("playing loop");
+                        }
                     }
                     else {
                         this.init.play();
