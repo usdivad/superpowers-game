@@ -142,7 +142,7 @@ namespace Sup {
             */
             updateNextBeatTime() {
                 let nextBeatTime = Sup.Audio.Conductor.calculateNextBeatTime(this.nextBeatTime, this.bpm);
-                this.log(this.bpm);
+                // this.log(this.bpm);
                 // this.log(this.nextBeatTime + " -> " + nextBeatTime);
                 this.nextBeatTime = nextBeatTime;
             }
@@ -193,18 +193,30 @@ namespace Sup {
                 let bpm = this.bpm;
                 if (bpmIn) {
                     bpm = bpmIn;
-                    this.log("bpmIn is " + bpmIn);
                 }
-                this.log("bpm is " + bpm);
-                let beatsLeft = this.timesig - (this.beatNum % this.timesig);
+                // this.log("bpm is " + bpm);
+                let beatsLeft = this.timesig - this.beatNum;
                 let secondsLeft = Conductor.calculateNextBeatTime(0, bpm) * beatsLeft;
                 // return secondsLeft * 1000;
                 return secondsLeft;
             }
 
-            getMillisecondsLeftUntilNextDownbeat(bpm?: number): number {
-                this.log("ms: bpm is " + bpm);
-                return this.getSecondsLeftUntilNextDownbeat(bpm) * 1000;
+            getMillisecondsLeftUntilNextDownbeat(bpmIn?: number): number {
+                return this.getSecondsLeftUntilNextDownbeat(bpmIn) * 1000;
+            }
+
+            getMillisecondsLeftUntilNextTransitionBeat(): number {
+                if (this.transitionBeats.length < 1) {
+                    this.log("no transition beats!");
+                    return -1;
+                }
+                let nextTransitionBeat = this.transitionBeats.slice().sort()[0];
+                let beatsLeft = nextTransitionBeat - this.beatNum;
+                if (beatsLeft < 0) {
+                    beatsLeft *= -1;
+                }
+                let secondsLeft = Conductor.calculateNextBeatTime(0, this.bpm) * beatsLeft
+                return secondsLeft * 1000;
             }
 
             setLogOutput(logOutput: boolean) {

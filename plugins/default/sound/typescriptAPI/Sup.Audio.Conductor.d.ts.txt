@@ -23,6 +23,7 @@ declare namespace Sup {
             updateNextBeatTime();
             getSecondsLeftUntilNextDownbeat(bpmIn?: number): number;
             getMillisecondsLeftUntilNextDownbeat(bpm?: number): number;
+            getMillisecondsLeftUntilNextTransitionBeat(): number;
 
             setLogOutput(logOutput: boolean);
             log(message?: any);
