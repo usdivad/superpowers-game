@@ -189,15 +189,22 @@ namespace Sup {
                 this.players[playerName].reset();
             }
 
-            getSecondsLeftUntilNextDownbeat(): number {
+            getSecondsLeftUntilNextDownbeat(bpmIn?: number): number {
+                let bpm = this.bpm;
+                if (bpmIn) {
+                    bpm = bpmIn;
+                    this.log("bpmIn is " + bpmIn);
+                }
+                this.log("bpm is " + bpm);
                 let beatsLeft = this.timesig - (this.beatNum % this.timesig);
-                let secondsLeft = Conductor.calculateNextBeatTime(0, this.bpm) * beatsLeft;
+                let secondsLeft = Conductor.calculateNextBeatTime(0, bpm) * beatsLeft;
                 // return secondsLeft * 1000;
                 return secondsLeft;
             }
 
-            getMillisecondsLeftUntilNextDownbeat(): number {
-                return this.getSecondsLeftUntilNextDownbeat() * 1000;
+            getMillisecondsLeftUntilNextDownbeat(bpm?: number): number {
+                this.log("ms: bpm is " + bpm);
+                return this.getSecondsLeftUntilNextDownbeat(bpm) * 1000;
             }
 
             setLogOutput(logOutput: boolean) {

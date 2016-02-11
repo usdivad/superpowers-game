@@ -21,8 +21,8 @@ declare namespace Sup {
             deactivatePlayer(playerName: string);
             
             updateNextBeatTime();
-            getSecondsLeftUntilNextDownbeat(): number;
-            getMillisecondsLeftUntilNextDownbeat(): number;
+            getSecondsLeftUntilNextDownbeat(bpmIn?: number): number;
+            getMillisecondsLeftUntilNextDownbeat(bpm?: number): number;
 
             setLogOutput(logOutput: boolean);
             log(message?: any);
