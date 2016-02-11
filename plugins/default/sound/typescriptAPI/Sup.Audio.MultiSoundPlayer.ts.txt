@@ -110,8 +110,13 @@ namespace Sup {
             }
 
             playTail(beatNum=0) {
-                if (this.active) {
-                    this.loop.setLoop(false); // stop loop from continuing
+                // stop init and loop
+                this.init.stop();
+                this.loop.stop();
+                this.loop.setLoop(false); // stop loop from continuing
+
+                // play tail
+                if (this.active && beatNum in this.tails) {
                     this.tails[beatNum].play(); // play tail sample
                     this.tailPlayed = true;
                     Sup.log("playing tail");
