@@ -19,6 +19,7 @@ namespace Sup {
             lookaheadTime: number;
             active: boolean;
             interval: any; // the internal metronome
+            logOutput: boolean;
             
             toNext: boolean;
             nextParams: any; // bpm, timesig, players
@@ -48,6 +49,7 @@ namespace Sup {
                 this.transition = false;
                 this.toNext = false;
                 this.nextParams = {};
+                this.logOutput = false;
 
                 // set params passed in
                 this.bpm = params.bpm;
@@ -64,7 +66,7 @@ namespace Sup {
                 }
             }
 
-            getPlayer(playerName): MultiSoundPlayer | SoundPlayer {
+            getPlayer(playerName): MultiSoundPlayer {
                 return this.players[playerName];
             }
 
@@ -73,16 +75,17 @@ namespace Sup {
             */
             start() {
                 let conductor = this;
+                let intervalMs = 1;
 
-                Sup.log("started");
+                this.log("started");
                 // this.nextBeatTime = this.ctx.currentTime;
                 this.active = true;
 
                 // set the interval and handle beats + players
-                this.interval = Sup.setInterval(10, function() {
+                this.interval = Sup.setInterval(intervalMs, function() {
                     if (conductor.nextBeatTime < conductor.ctx.currentTime + conductor.lookaheadTime) {
                         conductor.updateNextBeatTime();
-                        Sup.log(conductor.beatNum);
+                        conductor.log(conductor.beatNum);
 
                         if (conductor.transition) {
                             let beatIndex = conductor.transitionBeats.indexOf(conductor.beatNum);
@@ -101,18 +104,18 @@ namespace Sup {
                                     conductor.stop();
                                 }
 
-                                Sup.log("playing tails for beat " + conductor.beatNum);
+                                conductor.log("playing tails for beat " + conductor.beatNum);
                                 conductor.beatNum = -1; // hacky
                             }
                             else {
-                                // Sup.log("sorry, no tails found for beat " + conductor.beatNum);
+                                // conductor.log("sorry, no tails found for beat " + conductor.beatNum);
                             }
                         } else {
                             if (conductor.beatNum <= 0) { // downbeat (allow -1 for toNexts)
                                 conductor.playAllInitOrLoop();
 
-                                Sup.log("playing downbeat!");
-                                Sup.log(conductor.players);
+                                conductor.log("playing downbeat!");
+                                conductor.log(conductor.players);
                             }
                         }
 
@@ -130,7 +133,7 @@ namespace Sup {
                 Sup.clearInterval(this.interval);
                 this.beatNum = 0;
                 this.transition = false;
-                Sup.log("stopped " + this.interval);
+                this.log("stopped " + this.interval);
                 this.resetAllPlayers();
             }
 
@@ -139,8 +142,8 @@ namespace Sup {
             */
             updateNextBeatTime() {
                 let nextBeatTime = Sup.Audio.Conductor.calculateNextBeatTime(this.nextBeatTime, this.bpm);
-                Sup.log(this.bpm);
-                // Sup.log(this.nextBeatTime + " -> " + nextBeatTime);
+                this.log(this.bpm);
+                // this.log(this.nextBeatTime + " -> " + nextBeatTime);
                 this.nextBeatTime = nextBeatTime;
             }
 
@@ -195,6 +198,16 @@ namespace Sup {
 
             getMillisecondsLeftUntilNextDownbeat(): number {
                 return this.getSecondsLeftUntilNextDownbeat() * 1000;
+            }
+
+            setLogOutput(logOutput: boolean) {
+                this.logOutput = logOutput;
+            }
+
+            log(message?: any) {
+                if (this.logOutput) {
+                    Sup.log("Sup.Audio.Conductor: " + message);
+                }
             }
 
         }

@@ -1,7 +1,7 @@
 declare namespace Sup {
     namespace Audio {
         class MultiSoundPlayer {
-            constructor(init: string | Sound, loop: string | Sound, tails: any /* object or string */, volume: number /* 1.0 */, options?: { loop?: boolean; pitch?: number; pan?: number; active?: boolean;});
+            constructor(init: string | Sound, loop: string | Sound, tails: any /* object or string */, volume: number /* 1.0 */, options?: { loop?: boolean; pitch?: number; pan?: number; active?: boolean; logOutput?: boolean;});
             play(beatNum: number /* 0 */);
             playInitOrLoop(beatNum: number);
             playTail(beatNum: number /*0*/);
@@ -9,6 +9,12 @@ declare namespace Sup {
             reset();
             activate();
             deactivate();
+            getVolume(): number;
+            setVolume(volume: number);
+            fade(targetVolume: number, fadeLength: number /* in ms */);
+
+            setLogOutput(logOutput: boolean);
+            log(message?: any);
         }
     }
 }

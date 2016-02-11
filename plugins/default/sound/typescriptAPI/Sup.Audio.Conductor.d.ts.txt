@@ -10,7 +10,7 @@ declare namespace Sup {
             playAllInitOrLoop();
             playAllTails();
 
-            getPlayer(playerName: string): MultiSoundPlayer | SoundPlayer;
+            getPlayer(playerName: string): MultiSoundPlayer;
             resetAllPlayers();
             
             setNextParams(params: {bpm: number, timesig: number, players: any});
@@ -23,6 +23,9 @@ declare namespace Sup {
             updateNextBeatTime();
             getSecondsLeftUntilNextDownbeat(): number;
             getMillisecondsLeftUntilNextDownbeat(): number;
+
+            setLogOutput(logOutput: boolean);
+            log(message?: any);
         }
 
         namespace Conductor {
