@@ -1,5 +1,5 @@
 /*
- * A class that schedules audio events, in the form of MultiSoundPlayers,
+ * A music conductor that schedules audio events, in the form of MultiSoundPlayers,
  * based on beats per phrase according to an internal metronome/interval that
  * uses the Web Audio API's clock for timing.
  *
