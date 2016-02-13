@@ -23,33 +23,24 @@ declare namespace Sup {
             // sample paths as values, such as {0: "path/to/tail0.mp3", 6: "path/to/tail6.mp3"}
             // In that case, a tail corresponding to a beat number will only be played when
             // transitioning on that exact beat.
-            constructor(init: string | Sound, loop: string | Sound, tails: any /* object or string */, volume: number /* 1.0 */, options?:  { loop?: boolean; pitch?: number; pan?: number; active?: boolean; logOutput?: boolean;});
-            
-            // Play init, loop, or tail depending on playMode
-            // play(beatNum: number /* 0 */);
+            constructor(init: string | Sound, loop: string | Sound, tails: any /*object or string*/, volume: number /*1.0*/, options?:  { loop?: boolean; pitch?: number; pan?: number; active?: boolean; logOutput?: boolean;});
             
             // Play init or loop sample (depending on whether init has already been played)
             playInitOrLoop(beatNum: number);
-            
             // Play tail sample for a given beat number
             playTail(beatNum: number /*0*/);
-            
             // Set the play mode to "init", "loop", or "tail"
             setPlayMode(playMode: string);
             
+            // Activate a player so that it will play when called on
+            activate();
+            // Deactivate a player so that it doesn't play
+            deactivate();
             // Reset the player and the values of its members
             reset();
 
-            // Activate a player so that it will play when called on
-            activate();
-
-            // Deactivate a player so that it doesn't play
-            deactivate();
-
-            // Get the volume of the player
+            // Get or set the volume of the player
             getVolume(): number;
-
-            // Set the volume of the player
             setVolume(volume: number);
 
             // Increment the player's volume up or down, over a given amount of time,
@@ -58,7 +49,6 @@ declare namespace Sup {
 
             // Set console logging on/off
             setLogOutput(logOutput: boolean);
-
             // Log to console if logOutput is true
             log(message?: any);
         }

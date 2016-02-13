@@ -12,7 +12,8 @@ declare namespace Sup {
             // Construct a Conductor.
             //
             // - bpm -> beats per minute
-            // - timesig -> time signature (how many beats in a cycle, i.e. num of beats * num of measures)
+            // - timesig -> time signature (how many beats in a cycle,
+            //              i.e. num of beats * num of measures)
             // - players -> an object with player names as keys and MultiSoundPlayers as values,
             //              e.g. {"violin": MultiSoundPlayer, "piano": MultiSoundPlayer}
             constructor(bpm: number, timesig: number, players: any);
@@ -22,28 +23,23 @@ declare namespace Sup {
             
             // Start the Conductor's interval and player scheduling
             start();
-
             // Stop the Conductor and reset params for next start()
             stop();
 
             // Have all players play init sample if !initPlayed, otherwise loop sample
             playAllInitOrLoop();
-
             // Have all players play tail samples for Conductor's current beatNum
             playAllTails();
 
             // Return a player
             getPlayer(playerName: string): MultiSoundPlayer;
-
             // Call reset() on all players
             resetAllPlayers();
             
             // Set the params that Conductor will be reinitialized with for next section
             setNextParams(params: {bpm: number, timesig: number, players: any});
-
-           // Set whether Conductor should transition upon next available beat
+            // Set whether Conductor should transition upon next available beat
             setTransition(transition: boolean);
-            
             // Set whether Conductor should go to next section at the next available transition
             // (if false, Conductor will call stop() upon transitioning)
             setToNext(toNext: boolean);
@@ -52,22 +48,20 @@ declare namespace Sup {
             activatePlayer(playerName: string);
             deactivatePlayer(playerName: string);
             
+            // Get the current beat number
+            getBeatNum(): number;
             // Update the next beat's time based on the latest beat time and BPM
             updateNextBeatTime();
-
             // Return time, in seconds, until the next downbeat
             // ("downbeat" refers to when beatNum==0)
             getSecondsLeftUntilNextDownbeat(bpmIn?: number): number;
-            
             // Return time, in milliseconds, until the next downbeat
             getMillisecondsLeftUntilNextDownbeat(bpm?: number): number;
-
             // Return time, in milliseconds, until the next available transition beat
             getMillisecondsLeftUntilNextTransitionBeat(): number;
 
             // Set console logging on/off
             setLogOutput(logOutput: boolean);
-
             // Log to console if logOutput is true
             log(message?: any);
         }

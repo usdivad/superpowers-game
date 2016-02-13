@@ -189,6 +189,10 @@ namespace Sup {
                 this.players[playerName].reset();
             }
 
+            getBeatNum(): number {
+                return this.beatNum;
+            }
+
             getSecondsLeftUntilNextDownbeat(bpmIn?: number): number {
                 let bpm = this.bpm;
                 if (bpmIn) {
