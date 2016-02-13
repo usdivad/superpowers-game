@@ -11,6 +11,7 @@ namespace Sup {
             init: SoundPlayer;
             loop: SoundPlayer;
             tails: any;
+            originalLoopSetting: boolean;
             // soundPlayers: any;
             volume: number;
             playMode: string; // init, loop, tail
@@ -26,6 +27,10 @@ namespace Sup {
                 this.init = new SoundPlayer(init, volume, options);
                 this.loop = new SoundPlayer(loop, volume, options);
                 // this.loop = new SoundPlayer(loop, volume, {loop: true});
+                this.originalLoopSetting = false;
+                if ("loop" in options) {
+                    this.originalLoopSetting = options.loop;
+                }
 
                 // for multiple tails corresponding to multiple beats
                 this.tails = {};
@@ -111,6 +116,11 @@ namespace Sup {
                         this.playMode = "loop";
                     }
                 }
+                else {
+                    // this.init.stop();
+                    // this.loop.stop();
+                }
+
                 // else {
                 //     if (!this.tailPlayed) {
                 //         this.playTail(beatNum);
@@ -151,14 +161,17 @@ namespace Sup {
                 this.playMode = "init";
                 this.initPlayed = false;
                 this.tailPlayed = false;
+                this.loop.setLoop(this.originalLoopSetting);
             }
 
             activate() {
                 this.active = true;
+                this.loop.setLoop(this.originalLoopSetting);
             }
 
             deactivate() {
                 this.active = false;
+                this.loop.setLoop(false);
             }
 
             getVolume(): number {

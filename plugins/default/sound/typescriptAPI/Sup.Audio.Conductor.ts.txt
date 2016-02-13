@@ -19,6 +19,7 @@ namespace Sup {
             lookaheadTime: number;
             active: boolean;
             interval: any; // the internal metronome
+            intervalMs: number;
             logOutput: boolean;
             
             toNext: boolean;
@@ -50,6 +51,7 @@ namespace Sup {
                 this.toNext = false;
                 this.nextParams = {};
                 this.logOutput = false;
+                this.intervalMs = 1;
 
                 // set params passed in
                 this.bpm = params.bpm;
@@ -75,14 +77,13 @@ namespace Sup {
             */
             start() {
                 let conductor = this;
-                let intervalMs = 1;
 
                 this.log("started");
                 // this.nextBeatTime = this.ctx.currentTime;
                 this.active = true;
 
                 // set the interval and handle beats + players
-                this.interval = Sup.setInterval(intervalMs, function() {
+                this.interval = Sup.setInterval(this.intervalMs, function() {
                     if (conductor.nextBeatTime < conductor.ctx.currentTime + conductor.lookaheadTime) {
                         conductor.updateNextBeatTime();
                         conductor.log(conductor.beatNum);
@@ -189,6 +190,10 @@ namespace Sup {
                 this.players[playerName].reset();
             }
 
+            getContext(): any {
+                return this.ctx;
+            }
+
             getBeatNum(): number {
                 return this.beatNum;
             }
@@ -221,6 +226,19 @@ namespace Sup {
                 }
                 let secondsLeft = Conductor.calculateNextBeatTime(0, this.bpm) * beatsLeft
                 return secondsLeft * 1000;
+            }
+
+            scheduleEvent(msFromNow: number, event: any) {
+                let ctx = this.ctx;
+                let eventTime = this.ctx.currentTime + (msFromNow / 1000);
+                let eventInterval = Sup.setInterval(this.intervalMs, function() {
+                    Sup.log(eventTime + ", " + ctx.currentTime);
+                    if (eventTime < ctx.currentTime) {
+                        event();
+                        Sup.clearInterval(eventInterval);
+                    }
+                });
+                Sup.log("scheduling");
             }
 
             setLogOutput(logOutput: boolean) {

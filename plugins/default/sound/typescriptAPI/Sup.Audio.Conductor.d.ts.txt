@@ -60,6 +60,12 @@ declare namespace Sup {
             // Return time, in milliseconds, until the next available transition beat
             getMillisecondsLeftUntilNextTransitionBeat(): number;
 
+            // Return the Conductor's AudioContext
+            getContext(): any;
+
+            // Schedule an event to occur a certain number of milliseconds in the future
+            scheduleEvent(msFromNow: number, event: any);
+
             // Set console logging on/off
             setLogOutput(logOutput: boolean);
             // Log to console if logOutput is true
