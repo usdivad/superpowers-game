@@ -43,6 +43,8 @@ declare namespace Sup {
             // Set whether Conductor should go to next section at the next available transition
             // (if false, Conductor will call stop() upon transitioning)
             setToNext(toNext: boolean);
+            // Get whether Conductor is transitioning
+            isTransitioning(): boolean;
             
             // Activate or deactivate a player
             activatePlayer(playerName: string);

@@ -184,6 +184,10 @@ namespace Sup {
                 this.toNext = toNext;
             }
 
+            isTransitioning(): boolean {
+                return this.transition;
+            }
+
             activatePlayer(playerName: string) {
                 this.players[playerName].activate();
             }
@@ -255,7 +259,7 @@ namespace Sup {
                 let ctx = this.ctx;
                 let eventTime = this.ctx.currentTime + (msFromNow / 1000);
                 let eventInterval = Sup.setInterval(this.intervalMs, function() {
-                    Sup.log(eventTime + ", " + ctx.currentTime);
+                    // Sup.log(eventTime + ", " + ctx.currentTime);
                     if (eventTime < ctx.currentTime) {
                         event();
                         Sup.clearInterval(eventInterval);
