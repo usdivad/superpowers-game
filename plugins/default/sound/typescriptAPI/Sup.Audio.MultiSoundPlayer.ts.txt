@@ -135,20 +135,22 @@ namespace Sup {
                 this.loop.setLoop(false); // stop loop from continuing
 
                 // play tail
-                if (this.active && beatNum in this.tails) {
-                    this.tails[beatNum].play(); // play tail sample
-                    this.tailPlayed = true;
-                    this.log("playing tail");
-                }
-                else {
-                    let keys = [];
-                    for (var key in this.tails) {
-                        keys.push(key);
-                    }
-                    if (keys.length == 1 && 0 in this.tails) {
-                        this.tails[0].play();// play default tail sample
+                if (this.active) {
+                    if (beatNum in this.tails) {
+                        this.tails[beatNum].play(); // play tail sample
                         this.tailPlayed = true;
-                        this.log("playing default tail");
+                        this.log("playing tail");
+                    }
+                    else {
+                        let keys = [];
+                        for (var key in this.tails) {
+                            keys.push(key);
+                        }
+                        if (keys.length == 1 && 0 in this.tails) {
+                            this.tails[0].play();// play default tail sample
+                            this.tailPlayed = true;
+                            this.log("playing default tail");
+                        }
                     }
                 }
             }

@@ -60,6 +60,8 @@ declare namespace Sup {
             // Return time, in milliseconds, until the next available transition beat
             getMillisecondsLeftUntilNextTransitionBeat(): number;
 
+            // Return the Conductor's BPM
+            getBpm(): number;
             // Return the Conductor's AudioContext
             getContext(): any;
 

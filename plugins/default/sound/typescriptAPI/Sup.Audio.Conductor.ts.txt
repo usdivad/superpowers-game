@@ -159,6 +159,9 @@ namespace Sup {
                 for (var pk in this.players) {
                     let player = this.players[pk];
                     player.playTail(this.beatNum);
+
+                    // player.init.stop();
+                    // player.loop.stop();
                 }
             }
 
@@ -198,6 +201,10 @@ namespace Sup {
                 return this.beatNum;
             }
 
+            getBpm(): number {
+                return this.bpm;
+            }
+
             getSecondsLeftUntilNextDownbeat(bpmIn?: number): number {
                 let bpm = this.bpm;
                 if (bpmIn) {
@@ -219,12 +226,28 @@ namespace Sup {
                     this.log("no transition beats!");
                     return -1;
                 }
-                let nextTransitionBeat = this.transitionBeats.slice().sort()[0];
+
+                let numericComparison = function(a, b) {
+                    return a - b;
+                };
+                let tbSorted = this.transitionBeats.slice().sort(numericComparison);
+                tbSorted.push(tbSorted[0] + this.timesig); // add first transition beat of next cycle
+                // let nextTransitionBeat = tbSorted[tbSorted.length-1];
+                tbSorted.reverse();
+
+                let nextTransitionBeat = tbSorted[0];
+                for (var i = 0; i < tbSorted.length; i++) {
+                    if (tbSorted[i] > this.beatNum) {
+                        nextTransitionBeat = tbSorted[i];
+                    }
+                }
+                this.log("current beat: " + this.beatNum + ", nextTransitionBeat: " + nextTransitionBeat);
+                
                 let beatsLeft = nextTransitionBeat - this.beatNum;
                 if (beatsLeft < 0) {
                     beatsLeft *= -1;
                 }
-                let secondsLeft = Conductor.calculateNextBeatTime(0, this.bpm) * beatsLeft
+                let secondsLeft = Conductor.calculateNextBeatTime(0, this.bpm) * beatsLeft;
                 return secondsLeft * 1000;
             }
 
