@@ -1,7 +1,11 @@
 /*
  * A class, comprised of multiple SoundPlayers, that provides methods for
  * smoother and more robust game audio in the form of an "init, loop, tail(s)"
- * scheme.
+ * scheme similar to that of other game audio engines.
+ *
+ * In other words, the first time a MultiSoundPlayer is played, it should play
+ * the "init" sample; subsequent plays will play the "loop" sample, and the final
+ * time it should play the "tail" sample for the corresponding beat number.
  *
  */
 
