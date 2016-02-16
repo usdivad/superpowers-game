@@ -4,6 +4,10 @@
  * scheme, allowing for looped sections of varying repetitions to begin and end
  * seamlessly.
  *
+ * The first time a MultiSoundPlayer is played, it should play
+ * the "init" sample; subsequent plays will play the "loop" sample, and the final
+ * time it should play the "tail" sample for the corresponding beat number.
+ *
  */
 
 declare namespace Sup {
