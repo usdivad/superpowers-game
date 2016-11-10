@@ -54,6 +54,10 @@ declare namespace Sup {
             activatePlayers(playerNames: Array<string>);
             deactivatePlayers(playerNames: Array<string>);
 
+            // Activate or deactivate all players
+            activateAllPlayers();
+            deactivateAllPlayers();
+
             // Fade a single player, multiple players, or all players
             fadePlayer(playerName: string, targetVolume: number, fadeLength: number /* in ms */);
             fadePlayers(playerNames: Array<string>, targetVolume: number, fadeLength: number);

@@ -219,6 +219,18 @@ namespace Sup {
                 }
             }
 
+            activateAllPlayers() {
+                for (var pk in this.players) {
+                    this.activatePlayer(pk);
+                }
+            }
+
+            deactivateAllPlayers() {
+                for (var pk in this.players) {
+                    this.deactivatePlayer(pk);
+                }
+            }
+
             fadePlayer(playerName: string, targetVolume: number, fadeLength: number /* in ms */) {
                 if (this.players[playerName]) {
                     this.players[playerName].fade(targetVolume, fadeLength);
