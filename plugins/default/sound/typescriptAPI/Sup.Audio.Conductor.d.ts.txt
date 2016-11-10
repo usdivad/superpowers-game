@@ -49,6 +49,10 @@ declare namespace Sup {
             // Activate or deactivate a player
             activatePlayer(playerName: string);
             deactivatePlayer(playerName: string);
+
+            // Activate or deactivate multiple players
+            activatePlayers(playerNames: Array<string>);
+            deactivatePlayers(playerNames: Array<string>);
             
             // Get the current beat number
             getBeatNum(): number;

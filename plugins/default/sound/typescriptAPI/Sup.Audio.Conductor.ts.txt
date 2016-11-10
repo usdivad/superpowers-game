@@ -189,12 +189,34 @@ namespace Sup {
             }
 
             activatePlayer(playerName: string) {
-                this.players[playerName].activate();
+                if (this.players[playerName]) {
+                    this.players[playerName].activate();
+                }
+                else {
+                    this.log("no player named " + playerName + " found!");
+                }
             }
 
             deactivatePlayer(playerName: string) {
-                this.players[playerName].deactivate();
-                this.players[playerName].reset();
+                if (this.players[playerName]) {
+                    this.players[playerName].deactivate();
+                    this.players[playerName].reset();
+                }
+              else {
+                    this.log("no player named " + playerName + " found!");
+                }
+            }
+
+            activatePlayers(playerNames: Array<string>) {
+                for (var playerName of playerNames) {
+                    this.activatePlayer(playerName);
+                }
+            }
+
+            deactivatePlayers(playerNames: Array<string>) {
+                for (var playerName of playerNames) {
+                    this.deactivatePlayer(playerName);
+                }
             }
 
             getContext(): any {
