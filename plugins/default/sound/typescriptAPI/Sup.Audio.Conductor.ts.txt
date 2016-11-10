@@ -193,7 +193,7 @@ namespace Sup {
                     this.players[playerName].activate();
                 }
                 else {
-                    this.log("no player named " + playerName + " found!");
+                    this.log("activatePlayer: no player named " + playerName + " found!");
                 }
             }
 
@@ -203,7 +203,7 @@ namespace Sup {
                     this.players[playerName].reset();
                 }
               else {
-                    this.log("no player named " + playerName + " found!");
+                    this.log("deactivatePlayer: no player named " + playerName + " found!");
                 }
             }
 
@@ -216,6 +216,27 @@ namespace Sup {
             deactivatePlayers(playerNames: Array<string>) {
                 for (var playerName of playerNames) {
                     this.deactivatePlayer(playerName);
+                }
+            }
+
+            fadePlayer(playerName: string, targetVolume: number, fadeLength: number /* in ms */) {
+                if (this.players[playerName]) {
+                    this.players[playerName].fade(targetVolume, fadeLength);
+                }
+                else {
+                    this.log("fadePlayer: no player named " + playerName + " found!");
+                }
+            }
+
+            fadePlayers(playerNames: Array<string>, targetVolume: number, fadeLength: number) {
+                for (var playerName of playerNames) {
+                    this.fadePlayer(playerName, targetVolume, fadeLength);
+                }
+            }
+
+            fadeAllPlayers(targetVolume: number, fadeLength: number) {
+                for (var pk in this.players) {
+                    this.fadePlayer(pk, targetVolume, fadeLength);
                 }
             }
 

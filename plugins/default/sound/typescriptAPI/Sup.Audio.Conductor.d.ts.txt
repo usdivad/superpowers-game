@@ -53,7 +53,12 @@ declare namespace Sup {
             // Activate or deactivate multiple players
             activatePlayers(playerNames: Array<string>);
             deactivatePlayers(playerNames: Array<string>);
-            
+
+            // Fade a single player, multiple players, or all players
+            fadePlayer(playerName: string, targetVolume: number, fadeLength: number /* in ms */);
+            fadePlayers(playerNames: Array<string>, targetVolume: number, fadeLength: number);
+            fadeAllPlayers(targetVolume: number, fadeLength: number);
+
             // Get the current beat number
             getBeatNum(): number;
             // Update the next beat's time based on the latest beat time and BPM
