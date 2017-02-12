@@ -2,20 +2,18 @@ import ui from "./ui";
 import { data } from "./network";
 import { createShaderMaterial } from "../../components/Shader";
 
-let THREE = SupEngine.THREE;
+const THREE = SupEngine.THREE;
 
-let canvasElt = <HTMLCanvasElement>document.querySelector("canvas");
-let gameInstance = new SupEngine.GameInstance(canvasElt);
+const canvasElt = <HTMLCanvasElement>document.querySelector("canvas");
+const gameInstance = new SupEngine.GameInstance(canvasElt);
 
-let cameraActor = new SupEngine.Actor(gameInstance, "Camera");
+const cameraActor = new SupEngine.Actor(gameInstance, "Camera");
 cameraActor.setLocalPosition(new THREE.Vector3(0, 0, 10));
-let cameraComponent = new SupEngine.componentClasses["Camera"](cameraActor);
-/* tslint:disable:no-unused-expression */
+const cameraComponent = new SupEngine.componentClasses["Camera"](cameraActor);
 new SupEngine.editorComponentClasses["Camera3DControls"](cameraActor, cameraComponent);
-/* tslint:enable:no-unused-expression */
 
-let loader = new THREE.TextureLoader();
-let leonardTexture = loader.load("leonard.png", undefined);
+const loader = new THREE.TextureLoader();
+const leonardTexture = loader.load("leonard.png", undefined);
 leonardTexture.magFilter = THREE.NearestFilter;
 leonardTexture.minFilter = THREE.NearestFilter;
 
@@ -52,7 +50,7 @@ export function setupPreview(options = { useDraft: false }) {
       break;
     case "Asset":
       let componentClassName: string;
-      let config = { materialType: "shader", shaderAssetId: SupClient.query.asset, spriteAssetId: <string>null, modelAssetId: <string>null };
+      const config = { materialType: "shader", shaderAssetId: SupClient.query.asset, spriteAssetId: <string>null, modelAssetId: <string>null };
       if (ui.previewEntry.type === "sprite") {
         componentClassName = "SpriteRenderer";
         config.spriteAssetId = ui.previewEntry.id;
@@ -61,13 +59,9 @@ export function setupPreview(options = { useDraft: false }) {
         config.modelAssetId = ui.previewEntry.id;
       }
 
-      let componentClass = SupEngine.componentClasses[componentClassName];
-      let component = new componentClass(previewActor);
-      data.previewComponentUpdater = new componentClass.Updater(
-        data.projectClient,
-        component,
-        config
-      );
+      const componentClass = SupEngine.componentClasses[componentClassName];
+      const component = new componentClass(previewActor);
+      data.previewComponentUpdater = new componentClass.Updater(data.projectClient, component, config);
       return;
   }
   material = createShaderMaterial(data.shaderAsset.pub, { map: leonardTexture }, previewGeometry, options);
@@ -76,14 +70,37 @@ export function setupPreview(options = { useDraft: false }) {
   gameInstance.draw();
 }
 
+let isTabActive = true;
+let animationFrame: number;
+
+window.addEventListener("message", (event) => {
+  if (event.data.type === "deactivate" || event.data.type === "activate") {
+    isTabActive = event.data.type === "activate";
+    onChangeActive();
+  }
+});
+
+function onChangeActive() {
+  const stopRendering = !isTabActive;
+
+  if (stopRendering) {
+    if (animationFrame != null) {
+      cancelAnimationFrame(animationFrame);
+      animationFrame = null;
+    }
+  } else if (animationFrame == null) {
+    animationFrame = requestAnimationFrame(tick);
+  }
+}
+
 let lastTimestamp = 0;
 let accumulatedTime = 0;
 function tick(timestamp = 0) {
-  requestAnimationFrame(tick);
+  animationFrame = requestAnimationFrame(tick);
 
   accumulatedTime += timestamp - lastTimestamp;
   lastTimestamp = timestamp;
-  let { updates, timeLeft } = gameInstance.tick(accumulatedTime);
+  const { updates, timeLeft } = gameInstance.tick(accumulatedTime);
   accumulatedTime = timeLeft;
 
   if (updates !== 0 && material != null)
@@ -92,4 +109,4 @@ function tick(timestamp = 0) {
 
   gameInstance.draw();
 }
-requestAnimationFrame(tick);
+animationFrame = requestAnimationFrame(tick);

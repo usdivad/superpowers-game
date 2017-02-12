@@ -1,14 +1,8 @@
 import FontAsset from "../data/FontAsset";
 import TextRenderer from "./TextRenderer";
+import { TextRendererConfigPub } from "../componentConfigs/TextRendererConfig";
 
 export default class TextRendererUpdater {
-
-  client: SupClient.ProjectClient;
-  textRenderer: TextRenderer;
-
-  receiveAssetCallbacks: any;
-  editAssetCallbacks: any;
-
   fontAssetId: string;
   text: string;
   options: {
@@ -18,22 +12,28 @@ export default class TextRendererUpdater {
     color?: string;
   };
 
-  fontSubscriber: {
-    onAssetReceived: (assetId: string, asset: any) => any;
-    onAssetEdited: (id: string, command: string, ...args: any[]) => any;
-    onAssetTrashed: (assetId: string) => any};
+  overrideOpacity: boolean;
+  opacity: number;
 
+  private fontSubscriber: SupClient.AssetSubscriber;
   fontAsset: FontAsset;
 
-  constructor(client: SupClient.ProjectClient, textRenderer: TextRenderer, config: any, receiveAssetCallbacks?: any, editAssetCallbacks?: any) {
-    this.client = client;
-    this.textRenderer = textRenderer;
-    this.receiveAssetCallbacks = receiveAssetCallbacks;
-    this.editAssetCallbacks = editAssetCallbacks;
-
+  constructor(private client: SupClient.ProjectClient, public textRenderer: TextRenderer, config: TextRendererConfigPub,
+  private externalSubscriber?: SupClient.AssetSubscriber) {
     this.fontAssetId = config.fontAssetId;
     this.text = config.text;
-    this.options = {alignment: config.alignment, verticalAlignment: config.verticalAlignment, size: config.size, color: config.color};
+    this.options = {
+      alignment: config.alignment,
+      verticalAlignment: config.verticalAlignment,
+      size: config.size,
+      color: config.color,
+    };
+
+    this.overrideOpacity = config.overrideOpacity;
+    this.opacity = config.opacity;
+    if (this.overrideOpacity) this.textRenderer.setOpacity(this.opacity);
+
+    if (this.externalSubscriber == null) this.externalSubscriber = {};
 
     this.fontSubscriber = {
       onAssetReceived: this.onFontAssetReceived,
@@ -58,16 +58,26 @@ export default class TextRendererUpdater {
 
         if (this.fontAssetId != null) this.client.subAsset(this.fontAssetId, "font", this.fontSubscriber);
       } break;
+
       case "text": {
         this.text = value;
         this.textRenderer.setText(this.text);
       } break;
+
       case "alignment":
       case "verticalAlignment":
       case "size":
       case "color": {
-        (<any>this.options)[path] = (value !== "") ? value : null;
+        (this.options as any)[path] = (value !== "") ? value : null;
         this.textRenderer.setOptions(this.options);
+      } break;
+
+      case "overrideOpacity":
+      case "opacity": {
+        (this as any)[path] = value;
+
+        if (this.overrideOpacity) this.textRenderer.setOpacity(this.opacity);
+        else if (this.fontAsset != null) this.textRenderer.setOpacity(this.fontAsset.pub.opacity);
       } break;
     }
   }
@@ -77,27 +87,26 @@ export default class TextRendererUpdater {
 
     this.textRenderer.setText(this.text);
     this.textRenderer.setOptions(this.options);
-    this._setupFont();
 
-    if (this.receiveAssetCallbacks != null) this.receiveAssetCallbacks.font(null);
+    if (!this.overrideOpacity) this.textRenderer.opacity = asset.pub.opacity;
+    this.setupFont();
+
+    if (this.externalSubscriber.onAssetReceived) this.externalSubscriber.onAssetReceived(assetId, asset);
   };
 
-  private onFontAssetEdited = (id: string, command: string, ...args: any[]) => {
-    let commandFunction = (<any>this)[`onEditCommand_${command}`];
+  private onFontAssetEdited = (assetId: string, command: string, ...args: any[]) => {
+    const commandFunction = this.onEditCommands[command];
     if (commandFunction != null) commandFunction.apply(this, args);
 
-    if (this.editAssetCallbacks != null) {
-      let editCallback = this.editAssetCallbacks.font[command];
-      if (editCallback != null) editCallback.apply(null, args);
-    }
+    if (this.externalSubscriber.onAssetEdited) this.externalSubscriber.onAssetEdited(assetId, command, ...args);
   };
 
-  _setupFont() {
+  private setupFont() {
     this.textRenderer.clearMesh();
 
     if (this.fontAsset.pub.isBitmap) {
       if (this.fontAsset.pub.texture != null) {
-        let image = this.fontAsset.pub.texture.image;
+        const image = this.fontAsset.pub.texture.image;
         if (image.complete) this.textRenderer.setFont(this.fontAsset.pub);
         else image.addEventListener("load", () => { this.textRenderer.setFont(this.fontAsset.pub); });
       }
@@ -112,15 +121,20 @@ export default class TextRendererUpdater {
     }
   }
 
-  onEditCommand_upload() { this._setupFont(); }
+  private onEditCommands: { [command: string]: Function; } = {
+    upload: () => { this.setupFont(); },
 
-  onEditCommand_setProperty(path: string) {
-    if (path === "isBitmap") this._setupFont();
-    else this.textRenderer.setFont(this.fontAsset.pub);
-  }
+    setProperty: (path: string, value: any) => {
+      switch(path) {
+        case "isBitmap": this.setupFont(); break;
+        case "opacity": if (!this.overrideOpacity) this.textRenderer.setOpacity(value); break;
+        default: this.textRenderer.setFont(this.fontAsset.pub);
+      }
+    }
+  };
 
-  private onFontAssetTrashed = () => {
+  private onFontAssetTrashed = (assetId: string) => {
     this.textRenderer.clearMesh();
-    if (this.editAssetCallbacks != null) SupClient.onAssetTrashed();
+    if (this.externalSubscriber.onAssetTrashed != null) this.externalSubscriber.onAssetTrashed(assetId);
   };
 }

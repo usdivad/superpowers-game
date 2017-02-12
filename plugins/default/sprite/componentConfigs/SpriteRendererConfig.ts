@@ -1,12 +1,22 @@
 export interface SpriteRendererConfigPub {
-  formatVersion: number;
+  formatVersion?: number;
 
-  spriteAssetId: string; animationId: string;
-  horizontalFlip: boolean; verticalFlip: boolean;
-  castShadow: boolean; receiveShadow: boolean;
+  spriteAssetId: string;
+  animationId?: string;
+
+  horizontalFlip?: boolean;
+  verticalFlip?: boolean;
+
+  castShadow?: boolean;
+  receiveShadow?: boolean;
+
   color: string;
-  overrideOpacity: boolean; opacity: number;
-  materialType: string; shaderAssetId: string;
+
+  overrideOpacity?: boolean;
+  opacity?: number;
+
+  materialType: string;
+  shaderAssetId?: string;
 }
 
 export default class SpriteRendererConfig extends SupCore.Data.Base.ComponentConfig {
@@ -28,7 +38,7 @@ export default class SpriteRendererConfig extends SupCore.Data.Base.ComponentCon
   };
 
   static create() {
-    let emptyConfig: SpriteRendererConfigPub = {
+    const emptyConfig: SpriteRendererConfigPub = {
       formatVersion: SpriteRendererConfig.currentFormatVersion,
 
       spriteAssetId: null, animationId: null,
@@ -60,8 +70,8 @@ export default class SpriteRendererConfig extends SupCore.Data.Base.ComponentCon
       if (pub.materialType == null) pub.materialType = "basic";
 
       // NOTE: Legacy stuff from Superpowers 0.4
-      if (typeof pub.spriteAssetId === "number") pub.spriteAssetId = pub.spriteAssetId.toString();
-      if (typeof pub.animationId === "number") pub.animationId = pub.animationId.toString();
+      if (typeof pub.spriteAssetId === "number") pub.spriteAssetId = (pub.spriteAssetId as number).toString();
+      if (typeof pub.animationId === "number") pub.animationId = (pub.animationId as number).toString();
     }
 
     return true;

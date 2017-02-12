@@ -1,3 +1,5 @@
+import * as path from "path";
+
 export interface GameSettingsResourcePub {
   formatVersion: number;
 
@@ -51,7 +53,7 @@ export default class GameSettingsResource extends SupCore.Data.Base.Resource {
       if (pub.customLayers == null) pub.customLayers = [];
 
       this.server.data.entries.walk((node) => {
-        let path = this.server.data.entries.getPathFromId(node.id);
+        const path = this.server.data.entries.getPathFromId(node.id);
         if (path === (<any>pub).startupScene) pub.startupSceneId = node.id;
       });
       delete (<any>pub).startupScene;
@@ -68,7 +70,11 @@ export default class GameSettingsResource extends SupCore.Data.Base.Resource {
     }
   }
 
-  server_setProperty(client: any, path: string, value: number|string|boolean, callback: (err: string, path?: string, value?: any) => any) {
+  clientExport(outputPath: string, callback: (err: Error) => void) {
+    SupApp.writeFile(path.join(outputPath, "resource.json"), JSON.stringify(this.pub), callback);
+  }
+
+  server_setProperty(client: SupCore.RemoteClient, path: string, value: number|string|boolean, callback: SupCore.Data.Base.SetPropertyCallback) {
     let oldSceneId: string;
     if (path === "startupSceneId") oldSceneId = this.pub.startupSceneId;
 
@@ -80,7 +86,7 @@ export default class GameSettingsResource extends SupCore.Data.Base.Resource {
         if (actualValue != null && this.server.data.entries.byId[actualValue] != null) this.emit("setAssetBadge", actualValue, "startupScene", "info");
       }
 
-      callback(null, path, actualValue);
+      callback(null, null, path, actualValue);
     });
   }
 }

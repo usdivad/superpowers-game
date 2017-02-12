@@ -1,4 +1,4 @@
-interface Pub {
+export interface BehaviorConfigPub {
   behaviorName: string;
   propertyValues: { [name: string]: { type: string; value: any } };
 }
@@ -22,14 +22,14 @@ export default class BehaviorConfig extends SupCore.Data.Base.ComponentConfig {
 
   static create() { return { behaviorName: "", propertyValues: {} }; }
 
-  pub: Pub;
+  pub: BehaviorConfigPub;
 
-  constructor(pub: Pub) {
+  constructor(pub: BehaviorConfigPub) {
     if (pub.propertyValues == null) pub.propertyValues = {};
     super(pub, BehaviorConfig.schema);
   }
 
-  server_setBehaviorPropertyValue(client: any, name: string, type: string, value: any, callback: (err: string, name: string, type: string, value: any) => any) {
+  server_setBehaviorPropertyValue(client: SupCore.RemoteClient, name: string, type: string, value: any, callback: (err: string, name: string, type: string, value: any) => any) {
     this.pub.propertyValues[name] = { type, value };
     callback(null, name, type, value);
   }
@@ -38,7 +38,7 @@ export default class BehaviorConfig extends SupCore.Data.Base.ComponentConfig {
     this.pub.propertyValues[name] = { type, value };
   }
 
-  server_clearBehaviorPropertyValue(client: any, name: string, callback: (err: string, name: string) => any) {
+  server_clearBehaviorPropertyValue(client: SupCore.RemoteClient, name: string, callback: (err: string, name: string) => any) {
     delete this.pub.propertyValues[name];
     callback(null, name);
   }

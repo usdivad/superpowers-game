@@ -4,7 +4,7 @@ import * as async from "async";
 
 // Reference to THREE, client-side only
 let THREE: typeof SupEngine.THREE;
-if ((<any>global).window != null && (<any>window).SupEngine != null) THREE = SupEngine.THREE;
+if ((global as any).window != null && (window as any).SupEngine != null) THREE = SupEngine.THREE;
 
 import ModelAnimations from "./ModelAnimations";
 interface Animation {
@@ -13,6 +13,20 @@ interface Animation {
   duration: number;
   keyFrames: any;
 }
+
+type SetModelCallback = SupCore.Data.Base.ErrorCallback & ((err: string, ack: any, upAxisMatrix: number[], attributes: { [name: string]: any }, bones: any[]) => void);
+
+type SetMapsCallback = SupCore.Data.Base.ErrorCallback & ((err: string, ack: any, maps: any) => void);
+type NewMapCallback = SupCore.Data.Base.ErrorCallback & ((err: string, ack: any, name: string) => void);
+type DeleteMapCallback = SupCore.Data.Base.ErrorCallback & ((err: string, ack: any, name: string) => void);
+type RenameMapCallback = SupCore.Data.Base.ErrorCallback & ((err: string, ack: any, oldName: string, newName: string) => void);
+type SetMapSlotCallback = SupCore.Data.Base.ErrorCallback & ((err: string, ack: any, slot: string, map: string) => void);
+
+type NewAnimationCallback = SupCore.Data.Base.ErrorCallback & ((err: string, animationId: string, animation: Animation, actualIndex: number) => void);
+type DeleteAnimationCallback = SupCore.Data.Base.ErrorCallback & ((err: string, ack: any, id: string) => void);
+type MoveAnimationCallback = SupCore.Data.Base.ErrorCallback & ((err: string, ack: any, id: string, actualIndex: number) => void);
+type SetAnimationPropertyCallback = SupCore.Data.Base.ErrorCallback & ((err: string, ack: any, id: string, key: string, value: any) => void);
+type SetAnimationCallback = SupCore.Data.Base.ErrorCallback & ((err: string, ack: any, id: string, duration: number, keyFrames: any) => void);
 
 export interface ModelAssetPub {
   formatVersion: number;
@@ -143,8 +157,8 @@ export default class ModelAsset extends SupCore.Data.Base.Asset {
   load(assetPath: string) {
     let pub: ModelAssetPub;
 
-    let loadAttributesMaps = () => {
-      let mapNames: string[] = <any>pub.maps;
+    const loadAttributesMaps = () => {
+      const mapNames: string[] = pub.maps as any;
       // NOTE: "diffuse" was renamed to "map" in Superpowers 0.11
       if (pub.formatVersion == null && mapNames.length === 1 && mapNames[0] === "diffuse") mapNames[0] = "map";
 
@@ -243,85 +257,113 @@ export default class ModelAsset extends SupCore.Data.Base.Asset {
 
   client_load() {
     this.mapObjectURLs = {};
-    this._loadTextures();
+    this.loadTextures();
   }
 
   client_unload() {
-    this._unloadTextures();
+    this.unloadTextures();
   }
 
-  save(assetPath: string, saveCallback: Function) {
-    let attributes: any = this.pub.attributes;
-    let maps = this.pub.maps;
+  save(outputPath: string, callback: (err: Error) => void) {
+    this.write(fs.writeFile, outputPath, (err) => {
+      if (err != null) { callback(err); return; }
 
-    (<any>this.pub).attributes = [];
-    for (let key in attributes) {
-      if (attributes[key] != null) (<any>this.pub).attributes.push(key);
+      // Clean up old attributes and maps from disk
+      async.series([
+        (callback) => {
+          async.each(Object.keys(ModelAsset.schema["attributes"].properties), (key, cb) => {
+            const value = this.pub.attributes[key];
+            if (value != null) { cb(); return; }
+
+            fs.unlink(path.join(outputPath, `attr-${key}.dat`), (err) => {
+              if (err != null && err.code !== "ENOENT") { cb(err); return; }
+              cb();
+            });
+          }, callback);
+        },
+
+        (callback) => {
+          async.each(Object.keys(this.pub.maps), (mapName, cb) => {
+            const value = this.pub.maps[mapName];
+            if (value != null) { cb(); return; }
+
+            fs.unlink(path.join(outputPath, `map-${mapName}.dat`), (err) => {
+              if (err != null && err.code !== "ENOENT") { cb(err); return; }
+              cb();
+            });
+          }, callback);
+        }
+      ], callback);
+    });
+  }
+
+  clientExport(outputPath: string, callback: (err: Error) => void) {
+    this.write(SupApp.writeFile, outputPath, callback);
+  }
+
+  private write(writeFile: Function, outputPath: string, writeCallback: (err: Error) => void) {
+    const attributes = this.pub.attributes;
+    const maps = this.pub.maps;
+
+    (this.pub as any).attributes = [];
+    for (const key in attributes) {
+      if (attributes[key] != null) (this.pub as any).attributes.push(key);
     }
 
-    (<any>this.pub).maps = [];
-    for (let mapName in maps) {
-      if (maps[mapName] != null) (<any>this.pub).maps.push(mapName);
+    (this.pub as any).maps = [];
+    for (const mapName in maps) {
+      if (maps[mapName] != null) (this.pub as any).maps.push(mapName);
     }
 
-    let json = JSON.stringify(this.pub, null, 2);
+    const textures = this.pub.textures;
+    delete this.pub.textures;
+
+    const json = JSON.stringify(this.pub, null, 2);
+
     this.pub.attributes = attributes;
     this.pub.maps = maps;
+    this.pub.textures = textures;
 
     async.series([
-
-      (callback) => { fs.writeFile(path.join(assetPath, "model.json"), json, { encoding: "utf8" }, (err) => { callback(err, null); }); },
+      (callback) => { writeFile(path.join(outputPath, "model.json"), json, { encoding: "utf8" }, callback); },
 
       (callback) => {
         async.each(Object.keys(ModelAsset.schema["attributes"].properties), (key, cb) => {
           let value = attributes[key];
+          if (value == null) { cb(); return; }
+          if (value instanceof ArrayBuffer) value = new Buffer(value);
 
-          if (value == null) {
-            fs.unlink(path.join(assetPath, `attr-${key}.dat`), (err) => {
-              if (err != null && err.code !== "ENOENT") { cb(err); return; }
-              cb();
-            });
-            return;
-          }
-
-          fs.writeFile(path.join(assetPath, `attr-${key}.dat`), value, cb);
-        }, (err) => { callback(err, null); });
+          writeFile(path.join(outputPath, `attr-${key}.dat`), value, cb);
+        }, callback);
       },
 
       (callback) => {
         async.each(Object.keys(maps), (mapName, cb) => {
           let value = maps[mapName];
+          if (value == null) { cb(); return; }
+          if (value instanceof ArrayBuffer) value = Buffer.from(value);
 
-          if (value == null) {
-            fs.unlink(path.join(assetPath, `map-${mapName}.dat`), (err) => {
-              if (err != null && err.code !== "ENOENT") { cb(err); return; }
-              cb();
-            });
-            return;
-          }
-
-          fs.writeFile(path.join(assetPath, `map-${mapName}.dat`), value, cb);
-        }, (err) => { callback(err, null); });
+          writeFile(path.join(outputPath, `map-${mapName}.dat`), value, cb);
+        }, callback);
       }
-
-    ], (err) => { saveCallback(err); });
+    ], writeCallback);
   }
 
-  _unloadTextures() {
-    for (let textureName in this.pub.textures) this.pub.textures[textureName].dispose();
+  private unloadTextures() {
+    for (const textureName in this.pub.textures) this.pub.textures[textureName].dispose();
 
-    for (let key in this.mapObjectURLs) {
+    for (const key in this.mapObjectURLs) {
       URL.revokeObjectURL(this.mapObjectURLs[key]);
       delete this.mapObjectURLs[key];
     }
   }
 
-  _loadTextures() {
-    this._unloadTextures();
+  private loadTextures() {
+    this.unloadTextures();
     this.pub.textures = {};
 
     Object.keys(this.pub.maps).forEach((key) => {
-      let buffer: any = this.pub.maps[key];
+      const buffer: any = this.pub.maps[key];
       if (buffer == null || buffer.byteLength === 0) return;
 
       let texture = this.pub.textures[key];
@@ -344,8 +386,8 @@ export default class ModelAsset extends SupCore.Data.Base.Asset {
           texture.wrapT = SupEngine.THREE.MirroredRepeatWrapping;
         }
 
-        let typedArray = new Uint8Array(buffer);
-        let blob = new Blob([ typedArray ], { type: "image/*" });
+        const typedArray = new Uint8Array(buffer);
+        const blob = new Blob([ typedArray ], { type: "image/*" });
         image.src = this.mapObjectURLs[key] = URL.createObjectURL(blob);
       }
 
@@ -360,8 +402,8 @@ export default class ModelAsset extends SupCore.Data.Base.Asset {
 
     switch (path) {
       case "filtering":
-        for (let textureName in this.pub.textures) {
-          let texture = this.pub.textures[textureName];
+        for (const textureName in this.pub.textures) {
+          const texture = this.pub.textures[textureName];
           if (this.pub.filtering === "pixelated") {
             texture.magFilter = THREE.NearestFilter;
             texture.minFilter = THREE.NearestFilter;
@@ -373,8 +415,8 @@ export default class ModelAsset extends SupCore.Data.Base.Asset {
         }
         break;
       case "wrapping":
-        for (let textureName in this.pub.textures) {
-          let texture = this.pub.textures[textureName];
+        for (const textureName in this.pub.textures) {
+          const texture = this.pub.textures[textureName];
           if (value === "clampToEdge") {
             texture.wrapS = SupEngine.THREE.ClampToEdgeWrapping;
             texture.wrapT = SupEngine.THREE.ClampToEdgeWrapping;
@@ -391,26 +433,25 @@ export default class ModelAsset extends SupCore.Data.Base.Asset {
     }
   }
 
-  server_setModel(client: any, upAxisMatrix: number[], attributes: { [name: string]: any }, bones: any[],
-  callback: (err: string, upAxisMatrix?: number[], attributes?: { [name: string]: any }, bones?: any[]) => any) {
+  server_setModel(client: SupCore.RemoteClient, upAxisMatrix: number[], attributes: { [name: string]: any }, bones: any[], callback: SetModelCallback) {
     // Validate up matrix
     if (upAxisMatrix != null) {
-      let violation = SupCore.Data.Base.getRuleViolation(upAxisMatrix, ModelAsset.schema["upAxisMatrix"], true);
+      const violation = SupCore.Data.Base.getRuleViolation(upAxisMatrix, ModelAsset.schema["upAxisMatrix"], true);
       if (violation != null) { callback(`Invalid up axis matrix: ${SupCore.Data.Base.formatRuleViolation(violation)}`); return; }
     }
 
     // Validate attributes
     if (attributes == null || typeof attributes !== "object") { callback("Attributes must be an object"); return; }
 
-    for (let key in attributes) {
-      let value = attributes[key];
-      if ((<any>ModelAsset.schema["attributes"].properties)[key] == null) { callback(`Unsupported attribute type: ${key}`); return; }
+    for (const key in attributes) {
+      const value = attributes[key];
+      if ((ModelAsset.schema["attributes"].properties as any)[key] == null) { callback(`Unsupported attribute type: ${key}`); return; }
       if (value != null && !(value instanceof Buffer)) { callback(`Value for ${key} must be an ArrayBuffer or null`); return; }
     }
 
     // Validate bones
     if (bones != null) {
-      let violation = SupCore.Data.Base.getRuleViolation(bones, ModelAsset.schema["bones"], true);
+      const violation = SupCore.Data.Base.getRuleViolation(bones, ModelAsset.schema["bones"], true);
       if (violation != null) { callback(`Invalid bones: ${SupCore.Data.Base.formatRuleViolation(violation)}`); return; }
     }
 
@@ -419,7 +460,7 @@ export default class ModelAsset extends SupCore.Data.Base.Asset {
     this.pub.attributes = attributes;
     this.pub.bones = bones;
 
-    callback(null, upAxisMatrix, attributes, bones);
+    callback(null, null, upAxisMatrix, attributes, bones);
     this.emit("change");
   }
 
@@ -429,32 +470,32 @@ export default class ModelAsset extends SupCore.Data.Base.Asset {
     this.pub.bones = bones;
   }
 
-  server_setMaps(client: any, maps: any, callback: (err: string, maps?: any) => any) {
+  server_setMaps(client: SupCore.RemoteClient, maps: any, callback: SetMapsCallback) {
     if (maps == null || typeof maps !== "object") { callback("Maps must be an object"); return; }
 
-    for (let mapName in maps) {
-      let value = maps[mapName];
+    for (const mapName in maps) {
+      const value = maps[mapName];
       if (this.pub.maps[mapName] == null) { callback(`The map ${mapName} doesn't exist`); return; }
       if (value != null && !(value instanceof Buffer)) { callback(`Value for ${mapName} must be an ArrayBuffer or null`); return; }
     }
 
-    for (let mapName in maps) this.pub.maps[mapName] = maps[mapName];
+    for (const mapName in maps) this.pub.maps[mapName] = maps[mapName];
 
-    callback(null, maps);
+    callback(null, null, maps);
     this.emit("change");
   }
 
   client_setMaps(maps: any) {
-    for (let mapName in maps) this.pub.maps[mapName] = maps[mapName];
-    this._loadTextures();
+    for (const mapName in maps) this.pub.maps[mapName] = maps[mapName];
+    this.loadTextures();
   }
 
-  server_newMap(client: any, name: string, callback: (err: string, name: string) => any) {
-    if (name == null || typeof name !== "string") { callback("Name of the map must be a string", null); return; }
-    if (this.pub.maps[name] != null) { callback(`The map ${name} already exists`, null); return; }
+  server_newMap(client: SupCore.RemoteClient, name: string, callback: NewMapCallback) {
+    if (name == null || typeof name !== "string") { callback("Name of the map must be a string"); return; }
+    if (this.pub.maps[name] != null) { callback(`The map ${name} already exists`); return; }
 
     this.pub.maps[name] = new Buffer(0);
-    callback(null, name);
+    callback(null, null, name);
     this.emit("change");
   }
 
@@ -462,18 +503,18 @@ export default class ModelAsset extends SupCore.Data.Base.Asset {
     this.pub.maps[name] = new Buffer(0);
   }
 
-  server_deleteMap(client: any, name: string, callback: (err: string, name: string) => any) {
-    if (name == null || typeof name !== "string") { callback("Name of the map must be a string", null); return; }
-    if (this.pub.maps[name] == null) { callback(`The map ${name} doesn't exist`, null); return; }
+  server_deleteMap(client: SupCore.RemoteClient, name: string, callback: DeleteMapCallback) {
+    if (name == null || typeof name !== "string") { callback("Name of the map must be a string"); return; }
+    if (this.pub.maps[name] == null) { callback(`The map ${name} doesn't exist`); return; }
 
     this.client_deleteMap(name);
-    callback(null, name);
+    callback(null, null, name);
     this.emit("change");
   }
 
   client_deleteMap(name: string) {
-    for (let slotName in this.pub.mapSlots) {
-      let map = this.pub.mapSlots[slotName];
+    for (const slotName in this.pub.mapSlots) {
+      const map = this.pub.mapSlots[slotName];
       if (map === name) this.pub.mapSlots[slotName] = null;
     }
 
@@ -481,13 +522,13 @@ export default class ModelAsset extends SupCore.Data.Base.Asset {
     this.pub.maps[name] = null;
   }
 
-  server_renameMap(client: any, oldName: string, newName: string, callback: (err: string, oldName: string, newName: string) => any) {
-    if (oldName == null || typeof oldName !== "string") { callback("Name of the map must be a string", null, null); return; }
-    if (newName == null || typeof newName !== "string") { callback("New name of the map must be a string", null, null); return; }
-    if (this.pub.maps[newName] != null) { callback(`The map ${newName} already exists`, null, null); return; }
+  server_renameMap(client: SupCore.RemoteClient, oldName: string, newName: string, callback: RenameMapCallback) {
+    if (oldName == null || typeof oldName !== "string") { callback("Name of the map must be a string"); return; }
+    if (newName == null || typeof newName !== "string") { callback("New name of the map must be a string"); return; }
+    if (this.pub.maps[newName] != null) { callback(`The map ${newName} already exists`); return; }
 
     this.client_renameMap(oldName, newName);
-    callback(null, oldName, newName);
+    callback(null, null, oldName, newName);
     this.emit("change");
   }
 
@@ -495,19 +536,19 @@ export default class ModelAsset extends SupCore.Data.Base.Asset {
     this.pub.maps[newName] = this.pub.maps[oldName];
     this.pub.maps[oldName] = null;
 
-    for (let slotName in this.pub.mapSlots) {
-      let map = this.pub.mapSlots[slotName];
+    for (const slotName in this.pub.mapSlots) {
+      const map = this.pub.mapSlots[slotName];
       if (map === oldName) this.pub.mapSlots[slotName] = newName;
     }
   }
 
-  server_setMapSlot(client: any, slot: string, map: string, callback: (err: string, slot: string, map: string) => any) {
-    if (slot == null || typeof slot !== "string") { callback("Name of the slot must be a string", null, null); return; }
-    if (map != null && typeof map !== "string") { callback("Name of the map must be a string", null, null); return; }
-    if (map != null && this.pub.maps[map] == null) { callback(`The map ${map} doesn't exist`, null, null); return; }
+  server_setMapSlot(client: SupCore.RemoteClient, slot: string, map: string, callback: SetMapSlotCallback) {
+    if (slot == null || typeof slot !== "string") { callback("Name of the slot must be a string"); return; }
+    if (map != null && typeof map !== "string") { callback("Name of the map must be a string"); return; }
+    if (map != null && this.pub.maps[map] == null) { callback(`The map ${map} doesn't exist`); return; }
 
     this.pub.mapSlots[slot] = map;
-    callback(null, slot, map);
+    callback(null, null, slot, map);
     this.emit("change");
   }
 
@@ -516,17 +557,17 @@ export default class ModelAsset extends SupCore.Data.Base.Asset {
   }
 
   // Animations
-  server_newAnimation(client: any, name: string, duration: number, keyFrames: any, callback: (err: string, animation?: Animation, actualIndex?: number) => any) {
+  server_newAnimation(client: SupCore.RemoteClient, name: string, duration: number, keyFrames: any, callback: NewAnimationCallback) {
     if (duration == null) duration = 0;
     if (keyFrames == null) keyFrames = [];
-    let animation: Animation = { name, duration, keyFrames };
+    const animation: Animation = { name, duration, keyFrames };
 
     this.animations.add(animation, null, (err, actualIndex) => {
       if (err != null) { callback(err); return; }
 
       animation.name = SupCore.Data.ensureUniqueName(animation.id, animation.name, this.animations.pub);
 
-      callback(null, animation, actualIndex);
+      callback(null, animation.id, animation, actualIndex);
       this.emit("change");
     });
   }
@@ -535,11 +576,11 @@ export default class ModelAsset extends SupCore.Data.Base.Asset {
     this.animations.client_add(animation, actualIndex);
   }
 
-  server_deleteAnimation(client: any, id: string, callback: (err: string, id?: string) => any) {
+  server_deleteAnimation(client: SupCore.RemoteClient, id: string, callback: DeleteAnimationCallback) {
     this.animations.remove(id, (err) => {
       if (err != null) { callback(err); return; }
 
-      callback(null, id);
+      callback(null, null, id);
       this.emit("change");
     });
   }
@@ -548,11 +589,11 @@ export default class ModelAsset extends SupCore.Data.Base.Asset {
     this.animations.client_remove(id);
   }
 
-  server_moveAnimation(client: any, id: string, newIndex: number, callback: (err: string, id?: string, actualIndex?: number) => any) {
+  server_moveAnimation(client: SupCore.RemoteClient, id: string, newIndex: number, callback: MoveAnimationCallback) {
     this.animations.move(id, newIndex, (err, actualIndex) => {
       if (err != null) { callback(err); return; }
 
-      callback(null, id, actualIndex);
+      callback(null, null, id, actualIndex);
       this.emit("change");
     });
   }
@@ -561,7 +602,7 @@ export default class ModelAsset extends SupCore.Data.Base.Asset {
     this.animations.client_move(id, newIndex);
   }
 
-  server_setAnimationProperty(client: any, id: string, key: string, value: any, callback: (err: string, id?: string, key?: string, actualValue?: any) => any) {
+  server_setAnimationProperty(client: SupCore.RemoteClient, id: string, key: string, value: any, callback: SetAnimationPropertyCallback) {
     if (key === "name") {
       if (typeof value !== "string") { callback("Invalid value"); return; }
       value = value.trim();
@@ -574,7 +615,7 @@ export default class ModelAsset extends SupCore.Data.Base.Asset {
     this.animations.setProperty(id, key, value, (err, actualValue) => {
       if (err != null) { callback(err); return; }
 
-      callback(null, id, key, actualValue);
+      callback(null, null, id, key, actualValue);
       this.emit("change");
     });
   }
@@ -583,25 +624,25 @@ export default class ModelAsset extends SupCore.Data.Base.Asset {
     this.animations.client_setProperty(id, key, actualValue);
   }
 
-  server_setAnimation(client: any, id: string, duration: number, keyFrames: any, callback: (err: string, id?: string, duration?: number, keyFrames?: any) => any) {
+  server_setAnimation(client: SupCore.RemoteClient, id: string, duration: number, keyFrames: any, callback: SetAnimationCallback) {
     let violation = SupCore.Data.Base.getRuleViolation(duration, ModelAnimations.schema["duration"], true);
     if (violation != null) { callback(`Invalid duration: ${SupCore.Data.Base.formatRuleViolation(violation)}`); return; }
 
     violation = SupCore.Data.Base.getRuleViolation(keyFrames, ModelAnimations.schema["keyFrames"], true);
     if (violation != null) { callback(`Invalid duration: ${SupCore.Data.Base.formatRuleViolation(violation)}`); return; }
 
-    let animation = this.animations.byId[id];
+    const animation = this.animations.byId[id];
     if (animation == null) { callback(`Invalid animation id: ${id}`); return; }
 
     animation.duration = duration;
     animation.keyFrames = keyFrames;
 
-    callback(null, id, duration, keyFrames);
+    callback(null, null, id, duration, keyFrames);
     this.emit("change");
   }
 
   client_setAnimation(id: string, duration: number, keyFrames: any) {
-    let animation = this.animations.byId[id];
+    const animation = this.animations.byId[id];
 
     animation.duration = duration;
     animation.keyFrames = keyFrames;

@@ -14,9 +14,10 @@
     "combine-source-map": "^0.7.1",
     "convert-source-map": "^1.1.1",
     "highlight.js": "^9.0.0",
-    "operational-transform": "^0.2.3"
+    "operational-transform": "^0.2.3",
+    "typescript": "~1.8.2"
   },
-  "superpowers": {
-    "publishedPluginBundles": ["typescriptAPI"]
+  "devDependencies": {
+    "@types/convert-source-map": "0.0.30"
   }
 }

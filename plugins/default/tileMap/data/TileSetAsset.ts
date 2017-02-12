@@ -7,6 +7,13 @@ import TileMapSettingsResource from "./TileMapSettingsResource";
 let THREE: typeof SupEngine.THREE;
 if ((<any>global).window != null && (<any>window).SupEngine != null) THREE = SupEngine.THREE;
 
+type UploadCallback = SupCore.Data.Base.ErrorCallback & ((err: string, ack: any, image: Buffer) => void);
+
+type AddTilePropertyCallback = SupCore.Data.Base.ErrorCallback & ((err: string, ack: any, tile: { x: number; y: number; }, name: string) => void);
+type RenameTilePropertyCallback = SupCore.Data.Base.ErrorCallback & ((err: string, ack: any, tile: {x: number; y: number}, name: string, newName: string) => void);
+type DeleteTilePropertyCallback = SupCore.Data.Base.ErrorCallback & ((err: string, ack: any, tile: { x: number; y: number; }, name: string) => void);
+type EditTilePropertyCallback = SupCore.Data.Base.ErrorCallback & ((err: string, ack: any, tile: {x: number; y: number}, name: string, value: string) => void);
+
 export interface TileSetAssetPub {
   formatVersion: number;
   image: Buffer|ArrayBuffer;
@@ -49,6 +56,8 @@ export default class TileSetAsset extends SupCore.Data.Base.Asset {
 
   init(options: any, callback: Function) {
     this.server.data.resources.acquire("tileMapSettings", null, (err: Error, tileMapSettings: TileMapSettingsResource) => {
+      this.server.data.resources.release("tileMapSettings", null);
+
       this.pub = {
         formatVersion: TileSetAsset.currentFormatVersion,
 
@@ -102,30 +111,47 @@ export default class TileSetAsset extends SupCore.Data.Base.Asset {
   client_load() { this.loadTexture(); }
   client_unload() { this.unloadTexture(); }
 
-  save(assetPath: string, callback: (err: NodeJS.ErrnoException) => any) {
+  save(outputPath: string, callback: (err: Error) => void) {
+    this.write(fs.writeFile, outputPath, callback);
+  }
+
+  clientExport(outputPath: string, callback: (err: Error) => void) {
+    this.write(SupApp.writeFile, outputPath, callback);
+  }
+
+  private write(writeFile: Function, outputPath: string, callback: (err: Error) => void) {
     let buffer = this.pub.image;
+    const texture = this.pub.texture;
+
     delete this.pub.image;
-    let json = JSON.stringify(this.pub, null, 2);
+    delete this.pub.texture;
+
+    const json = JSON.stringify(this.pub, null, 2);
+
     this.pub.image = buffer;
-    fs.writeFile(path.join(assetPath, "tileset.json"), json, { encoding: "utf8" }, () => {
-      fs.writeFile(path.join(assetPath, "image.dat"), buffer, callback);
+    this.pub.texture = texture;
+
+    if (buffer instanceof ArrayBuffer) buffer = new Buffer(buffer);
+
+    writeFile(path.join(outputPath, "tileset.json"), json, { encoding: "utf8" }, () => {
+      writeFile(path.join(outputPath, "image.dat"), buffer, callback);
     });
   }
 
   private loadTexture() {
     this.unloadTexture();
 
-    let buffer = this.pub.image as ArrayBuffer;
+    const buffer = this.pub.image as ArrayBuffer;
     if (buffer.byteLength === 0) return;
 
-    let image = new Image;
-    let texture = this.pub.texture = new THREE.Texture(image);
+    const image = new Image;
+    const texture = this.pub.texture = new THREE.Texture(image);
 
     texture.magFilter = THREE.NearestFilter;
     texture.minFilter = THREE.NearestFilter;
 
-    let typedArray = new Uint8Array(buffer);
-    let blob = new Blob([ typedArray ], { type: "image/*" });
+    const typedArray = new Uint8Array(buffer);
+    const blob = new Blob([ typedArray ], { type: "image/*" });
     image.src = this.url = URL.createObjectURL(blob);
 
     if (!image.complete) image.addEventListener("load", () => { texture.needsUpdate = true; });
@@ -139,12 +165,12 @@ export default class TileSetAsset extends SupCore.Data.Base.Asset {
     this.pub.texture = null;
   }
 
-  server_upload(client: any, image: Buffer, callback: (err: string, image: Buffer) => any) {
-    if (!(image instanceof Buffer)) { callback("Image must be an ArrayBuffer", null); return; }
+  server_upload(client: SupCore.RemoteClient, image: Buffer, callback: UploadCallback) {
+    if (!(image instanceof Buffer)) { callback("Image must be an ArrayBuffer"); return; }
 
     this.pub.image = image;
 
-    callback(null, image);
+    callback(null, null, image);
     this.emit("change");
   }
 
@@ -153,34 +179,33 @@ export default class TileSetAsset extends SupCore.Data.Base.Asset {
     this.loadTexture();
   }
 
-  server_addTileProperty(client: any, tile: {x: number; y: number}, name: string,
-  callback: (err: string, tile: {x: number; y: number}, name: string) => any) {
+  server_addTileProperty(client: SupCore.RemoteClient, tile: {x: number; y: number}, name: string, callback: AddTilePropertyCallback) {
 
     if (typeof(tile) !== "object" ||
     tile.x == null || typeof(tile.x) !== "number" ||
     tile.y == null || typeof(tile.y) !== "number") {
 
-      callback("Invalid tile location", null, null);
+      callback("Invalid tile location");
       return;
     }
 
-    if (typeof(name) !== "string") { callback("Invalid property name", null, null); return; }
+    if (typeof(name) !== "string") { callback("Invalid property name"); return; }
 
-    let properties: { [name: string]: string} = {};
+    const properties: { [name: string]: string} = {};
     properties[name] = "";
-    let violation = SupCore.Data.Base.getRuleViolation(properties, TileSetAsset.schema["tileProperties"].values, true);
-    if (violation != null) { callback(`Invalid property: ${SupCore.Data.Base.formatRuleViolation(violation)}`, null, null); return; }
+    const violation = SupCore.Data.Base.getRuleViolation(properties, TileSetAsset.schema["tileProperties"].values, true);
+    if (violation != null) { callback(`Invalid property: ${SupCore.Data.Base.formatRuleViolation(violation)}`); return; }
 
     if (this.pub.tileProperties[`${tile.x}_${tile.y}`] != null &&
     this.pub.tileProperties[`${tile.x}_${tile.y}`][name] != null) {
 
-      callback(`Property ${name} already exists`, null, null);
+      callback(`Property ${name} already exists`);
       return;
     }
 
     if (this.pub.tileProperties[`${tile.x}_${tile.y}`] == null) this.pub.tileProperties[`${tile.x}_${tile.y}`] = {};
     this.pub.tileProperties[`${tile.x}_${tile.y}`][name] = "";
-    callback(null, tile, name);
+    callback(null, null, tile, name);
     this.emit("change");
   }
 
@@ -189,32 +214,31 @@ export default class TileSetAsset extends SupCore.Data.Base.Asset {
     this.pub.tileProperties[`${tile.x}_${tile.y}`][name] = "";
   }
 
-  server_renameTileProperty(client: any, tile: {x: number; y: number}, name: string, newName: string,
-  callback: (err: string, tile: {x: number; y: number}, name: string, newName: string) => any) {
+  server_renameTileProperty(client: SupCore.RemoteClient, tile: {x: number; y: number}, name: string, newName: string, callback: RenameTilePropertyCallback) {
     if (typeof(tile) !== "object" ||
     tile.x == null || typeof(tile.x) !== "number" ||
     tile.y == null || typeof(tile.y) !== "number") {
 
-      callback("Invalid tile location", null, null, null);
+      callback("Invalid tile location");
       return;
     }
 
-    if (typeof(name) !== "string") { callback("Invalid property name", null, null, null); return; }
-    if (typeof(newName) !== "string") { callback("Invalid new property name", null, null, null); return; }
+    if (typeof(name) !== "string") { callback("Invalid property name"); return; }
+    if (typeof(newName) !== "string") { callback("Invalid new property name"); return; }
 
-    if (this.pub.tileProperties[`${tile.x}_${tile.y}`] == null) { callback(`Tile ${tile.x}_${tile.y} doesn't have any property`, null, null, null); return; }
+    if (this.pub.tileProperties[`${tile.x}_${tile.y}`] == null) { callback(`Tile ${tile.x}_${tile.y} doesn't have any property`); return; }
 
-    let properties: { [name: string]: string} = {};
+    const properties: { [name: string]: string} = {};
     properties[newName] = "";
-    let violation = SupCore.Data.Base.getRuleViolation(properties, TileSetAsset.schema["tileProperties"].values, true);
-    if (violation != null) { callback(`Invalid property: ${SupCore.Data.Base.formatRuleViolation(violation)}`, null, null, null); return; }
+    const violation = SupCore.Data.Base.getRuleViolation(properties, TileSetAsset.schema["tileProperties"].values, true);
+    if (violation != null) { callback(`Invalid property: ${SupCore.Data.Base.formatRuleViolation(violation)}`); return; }
 
-    if (this.pub.tileProperties[`${tile.x}_${tile.y}`][name] == null) { callback(`Property ${name} doesn't exists`, null, null, null); return; }
-    if (this.pub.tileProperties[`${tile.x}_${tile.y}`][newName] != null) { callback(`Property ${newName} already exists`, null, null, null); return; }
+    if (this.pub.tileProperties[`${tile.x}_${tile.y}`][name] == null) { callback(`Property ${name} doesn't exists`); return; }
+    if (this.pub.tileProperties[`${tile.x}_${tile.y}`][newName] != null) { callback(`Property ${newName} already exists`); return; }
 
     this.pub.tileProperties[`${tile.x}_${tile.y}`][newName] = this.pub.tileProperties[`${tile.x}_${tile.y}`][name];
     delete this.pub.tileProperties[`${tile.x}_${tile.y}`][name];
-    callback(null, tile, name, newName);
+    callback(null, null, tile, name, newName);
     this.emit("change");
   }
 
@@ -223,27 +247,26 @@ export default class TileSetAsset extends SupCore.Data.Base.Asset {
     delete this.pub.tileProperties[`${tile.x}_${tile.y}`][name];
   }
 
-  server_deleteTileProperty(client: any, tile: {x: number; y: number}, name: string,
-  callback: (err: string, tile: {x: number; y: number}, name: string) => any) {
+  server_deleteTileProperty(client: SupCore.RemoteClient, tile: {x: number; y: number}, name: string, callback: DeleteTilePropertyCallback) {
 
     if (typeof(tile) !== "object" ||
     tile.x == null || typeof(tile.x) !== "number" ||
     tile.y == null || typeof(tile.y) !== "number") {
 
-      callback("Invalid tile location", null, null);
+      callback("Invalid tile location");
       return;
     }
 
-    if (this.pub.tileProperties[`${tile.x}_${tile.y}`] == null) { callback(`Tile ${tile.x}_${tile.y} doesn't have any property`, null, null); return; }
-    if (typeof(name) !== "string") { callback("Invalid property name", null, null); return; }
+    if (this.pub.tileProperties[`${tile.x}_${tile.y}`] == null) { callback(`Tile ${tile.x}_${tile.y} doesn't have any property`); return; }
+    if (typeof(name) !== "string") { callback("Invalid property name"); return; }
 
-    if (this.pub.tileProperties[`${tile.x}_${tile.y}`][name] == null) { callback(`Property ${name} doesn't exists`, null, null); return; }
+    if (this.pub.tileProperties[`${tile.x}_${tile.y}`][name] == null) { callback(`Property ${name} doesn't exists`); return; }
 
     delete this.pub.tileProperties[`${tile.x}_${tile.y}`][name];
     if (Object.keys(this.pub.tileProperties[`${tile.x}_${tile.y}`]).length === 0)
       delete this.pub.tileProperties[`${tile.x}_${tile.y}`];
 
-    callback(null, tile, name);
+    callback(null, null, tile, name);
     this.emit("change");
   }
 
@@ -253,29 +276,28 @@ export default class TileSetAsset extends SupCore.Data.Base.Asset {
       delete this.pub.tileProperties[`${tile.x}_${tile.y}`];
   }
 
-  server_editTileProperty(client: any, tile: {x: number; y: number}, name: string, value: string,
-  callback: (err: string, tile: {x: number; y: number}, name: string, value: string) => any) {
+  server_editTileProperty(client: SupCore.RemoteClient, tile: {x: number; y: number}, name: string, value: string, callback: EditTilePropertyCallback) {
 
     if (typeof(tile) !== "object" ||
     tile.x == null || typeof(tile.x) !== "number" ||
     tile.y == null || typeof(tile.y) !== "number") {
 
-      callback("Invalid tile location", null, null, null);
+      callback("Invalid tile location");
       return;
     }
 
-    if (this.pub.tileProperties[`${tile.x}_${tile.y}`] == null) { callback(`Tile ${tile.x}_${tile.y} doesn't have any property`, null, null, null); return; }
-    if (typeof(name) !== "string") { callback("Invalid property name", null, null, null); return; }
-    if (this.pub.tileProperties[`${tile.x}_${tile.y}`][name] == null) { callback(`Property ${name} doesn't exists`, null, null, null); return; }
-    if (typeof(value) !== "string") { callback("Invalid property value", null, null, null); return; }
+    if (this.pub.tileProperties[`${tile.x}_${tile.y}`] == null) { callback(`Tile ${tile.x}_${tile.y} doesn't have any property`); return; }
+    if (typeof(name) !== "string") { callback("Invalid property name"); return; }
+    if (this.pub.tileProperties[`${tile.x}_${tile.y}`][name] == null) { callback(`Property ${name} doesn't exists`); return; }
+    if (typeof(value) !== "string") { callback("Invalid property value"); return; }
 
-    let properties: { [name: string]: string } = {};
+    const properties: { [name: string]: string } = {};
     properties[name] = value;
-    let violation = SupCore.Data.Base.getRuleViolation(properties, TileSetAsset.schema["tileProperties"].values, true);
-    if (violation != null) { callback(`Invalid property: ${SupCore.Data.Base.formatRuleViolation(violation)}`, null, null, null); return; }
+    const violation = SupCore.Data.Base.getRuleViolation(properties, TileSetAsset.schema["tileProperties"].values, true);
+    if (violation != null) { callback(`Invalid property: ${SupCore.Data.Base.formatRuleViolation(violation)}`); return; }
 
     this.pub.tileProperties[`${tile.x}_${tile.y}`][name] = value;
-    callback(null, tile, name, value);
+    callback(null, null, tile, name, value);
     this.emit("change");
   }
 

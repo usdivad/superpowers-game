@@ -1,23 +1,13 @@
 import Light from "./Light";
 import { LightConfigPub } from "../componentConfigs/LightConfig";
 import LightSettingsResource from "../data/LightSettingsResource";
-let THREE = SupEngine.THREE;
+const THREE = SupEngine.THREE;
 
 export default class LightUpdater {
-  projectClient: SupClient.ProjectClient;
-
-  light: Light;
-
   lightSettings: LightSettingsResource;
-  lightSettingsSubscriber = {
-    onResourceReceived: this._onLightResourceRecevied.bind(this),
-    onResourceEdited: this._onLightResourceEdited.bind(this)
-  };
+  lightSettingsSubscriber: SupClient.ResourceSubscriber;
 
-  constructor(projectClient: SupClient.ProjectClient, light: Light, config: LightConfigPub) {
-    this.projectClient = projectClient;
-    this.light = light;
-
+  constructor(private client: SupClient.ProjectClient, public light: Light, config: LightConfigPub) {
     this.light.color = parseInt(config.color, 16);
     this.light.intensity = config.intensity;
     this.light.distance = config.distance;
@@ -27,7 +17,6 @@ export default class LightUpdater {
     this.light.castShadow = config.castShadow;
     this.light.shadow.mapSize.set(config.shadowMapSize.width, config.shadowMapSize.height);
     this.light.shadow.bias = config.shadowBias;
-    this.light.shadow.darkness = config.shadowDarkness;
     this.light.shadow.camera.near = config.shadowCameraNearPlane;
     this.light.shadow.camera.far = config.shadowCameraFarPlane;
     this.light.shadow.camera.fov = config.shadowCameraFov;
@@ -38,11 +27,15 @@ export default class LightUpdater {
 
     this.light.setType(config.type);
 
-    this.projectClient.subResource("lightSettings", this.lightSettingsSubscriber);
+    this.lightSettingsSubscriber = {
+      onResourceReceived: this.onLightResourceReceived,
+      onResourceEdited: this.onLightResourceEdited
+    };
+    this.client.subResource("lightSettings", this.lightSettingsSubscriber);
   }
 
   destroy() {
-    this.projectClient.unsubResource("lightSettings", this.lightSettingsSubscriber);
+    this.client.unsubResource("lightSettings", this.lightSettingsSubscriber);
   }
 
   config_setProperty(path: string, value: any) {
@@ -83,9 +76,6 @@ export default class LightUpdater {
       case "shadowBias":
         this.light.setShadowBias(value);
         break;
-      case "shadowDarkness":
-        this.light.setShadowDarkness(value);
-        break;
       case "shadowCameraNearPlane":
         this.light.setShadowCameraNearPlane(value);
         break;
@@ -110,7 +100,7 @@ export default class LightUpdater {
     }
   }
 
-  _updateLightShadowMap() {
+  private updateLightShadowMap() {
     switch (this.lightSettings.pub.shadowMapType) {
       case "basic":
         this.light.actor.gameInstance.threeRenderer.shadowMap.type = THREE.BasicShadowMap;
@@ -123,17 +113,17 @@ export default class LightUpdater {
         break;
     }
     this.light.actor.gameInstance.threeScene.traverse((object: any) => {
-      let material: THREE.Material = object.material;
+      const material: THREE.Material = object.material;
       if (material != null) material.needsUpdate = true;
     });
   }
 
-  _onLightResourceRecevied(resourceId: string, resource: LightSettingsResource) {
+  private onLightResourceReceived = (resourceId: string, resource: LightSettingsResource) => {
     this.lightSettings = resource;
-    this._updateLightShadowMap();
+    this.updateLightShadowMap();
   }
 
-  _onLightResourceEdited(resourceId: string, command: string, propertyName: string) {
-    if (command === "setProperty" && propertyName === "shadowMapType") this._updateLightShadowMap();
+  private onLightResourceEdited = (resourceId: string, command: string, propertyName: string) => {
+    if (command === "setProperty" && propertyName === "shadowMapType") this.updateLightShadowMap();
   }
 }

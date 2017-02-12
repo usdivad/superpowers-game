@@ -26,14 +26,10 @@ const ui: {
   mapDownloadButton: HTMLInputElement;
   texturesToogleButton: HTMLInputElement;
   texturesTreeView: TreeView;
-  selectedTextureName: string;
 
   mapSlotsInput: { [name: string]: HTMLInputElement };
 } = {} as any;
 export default ui;
-
-// Setup hotkeys
-SupClient.setupHotkeys();
 
 // Setup resizable panes
 new ResizeHandle(document.querySelector(".sidebar") as HTMLElement, "right");
@@ -211,7 +207,12 @@ function onPrimaryMapFileSelectChange(event: Event) {
   ui.errorPaneStatus.classList.remove("has-errors");
 
   const reader = new FileReader;
-  reader.onload = (event) => { data.projectClient.editAsset(SupClient.query.asset, "setMaps", { map: reader.result }); };
+  const textureName = data.modelUpdater.modelAsset.pub.mapSlots["map"];
+  const maps = {} as any;
+  reader.onload = (event) => {
+    maps[textureName] = (event.target as any).result as ArrayBuffer;
+    data.projectClient.editAsset(SupClient.query.asset, "setMaps", maps);
+  };
 
   const element = <HTMLInputElement>event.target;
   reader.readAsArrayBuffer(element.files[0]);
@@ -237,12 +238,10 @@ function downloadTexture(textureName: string) {
     validationLabel: SupClient.i18n.t("common:actions.download")
   };
 
-  if (SupClient.isApp) {
+  if (SupApp != null) {
     triggerDownload(options.initialValue);
   } else {
-    /* tslint:disable:no-unused-expression */
     new SupClient.Dialogs.PromptDialog(SupClient.i18n.t("modelEditor:sidebar.advancedTextures.downloadPrompt"), options, (name) => {
-      /* tslint:enable:no-unused-expression */
       if (name == null) return;
       triggerDownload(name);
     });
@@ -266,9 +265,7 @@ function onNewAnimationClick() {
     validationLabel: SupClient.i18n.t("common:actions.create")
   };
 
-  /* tslint:disable:no-unused-expression */
   new SupClient.Dialogs.PromptDialog(SupClient.i18n.t("modelEditor:sidebar.animations.new.prompt"), options, (name) => {
-    /* tslint:enable:no-unused-expression */
     if (name == null) return;
 
     data.projectClient.editAsset(SupClient.query.asset, "newAnimation", name, null, null, (animationId: string) => {
@@ -280,7 +277,7 @@ function onNewAnimationClick() {
 }
 
 function onAnimationFileSelectChange(event: any) {
-  if(event.target.files.length === 0) return;
+  if (event.target.files.length === 0) return;
 
   const animationId: string = ui.selectedAnimationId;
 
@@ -290,12 +287,8 @@ function onAnimationFileSelectChange(event: any) {
     setImportLog(log);
 
     if (data != null) {
-      if (result.animation == null) {
-        /* tslint:disable:no-unused-expression */
-        new SupClient.Dialogs.InfoDialog("No animation found in imported files");
-        /* tslint:enable:no-unused-expression */
-        return;
-      }
+      if (result.animation == null) { new SupClient.Dialogs.InfoDialog("No animation found in imported files"); return; }
+
       // TODO: Check if bones are compatible
       data.projectClient.editAsset(SupClient.query.asset, "setAnimation", animationId, result.animation.duration, result.animation.keyFrames);
     }
@@ -313,9 +306,7 @@ function onRenameAnimationClick() {
     validationLabel: SupClient.i18n.t("common:actions.rename")
   };
 
-  /* tslint:disable:no-unused-expression */
   new SupClient.Dialogs.PromptDialog(SupClient.i18n.t("modelEditor:sidebar.animations.renamePrompt"), options, (newName) => {
-    /* tslint:enable:no-unused-expression */
     if (newName == null) return;
 
     data.projectClient.editAsset(SupClient.query.asset, "setAnimationProperty", animation.id, "name", newName);
@@ -327,9 +318,7 @@ function onDeleteAnimationClick() {
 
   const confirmLabel = SupClient.i18n.t("modelEditor:sidebar.animations.deleteConfirm");
   const validationLabel = SupClient.i18n.t("common:actions.delete");
-  /* tslint:disable:no-unused-expression */
   new SupClient.Dialogs.ConfirmDialog(confirmLabel, { validationLabel }, (confirm) => {
-    /* tslint:enable:no-unused-expression */
     if (!confirm) return;
 
     for (const selectedNode of ui.animationsTreeView.selectedNodes)
@@ -386,9 +375,7 @@ function onNewMapClick() {
     validationLabel: SupClient.i18n.t("common:actions.create")
   };
 
-  /* tslint:disable:no-unused-expression */
   new SupClient.Dialogs.PromptDialog(SupClient.i18n.t("modelEditor:sidebar.advancedTextures.newMapPrompt"), options, (name) => {
-    /* tslint:enable:no-unused-expression */
     if (name == null) return;
 
     data.projectClient.editAsset(SupClient.query.asset, "newMap", name);
@@ -396,6 +383,10 @@ function onNewMapClick() {
 }
 
 function onMapFileSelectChange(event: any) {
+  if (ui.texturesTreeView.selectedNodes.length !== 1) return;
+
+  const textureName = ui.texturesTreeView.selectedNodes[0].dataset["name"];
+
   ui.errorsTBody.innerHTML = "";
   ui.errorPaneInfo.textContent = "No errors";
   ui.errorPaneStatus.classList.remove("has-errors");
@@ -403,7 +394,7 @@ function onMapFileSelectChange(event: any) {
   const reader = new FileReader;
   const maps: any = {};
   reader.onload = (event) => {
-    maps[ui.selectedTextureName] = reader.result;
+    maps[textureName] = (event.target as any).result as ArrayBuffer;
     data.projectClient.editAsset(SupClient.query.asset, "setMaps", maps);
   };
 
@@ -416,17 +407,14 @@ function onMapFileSelectChange(event: any) {
 function onRenameMapClick() {
   if (ui.texturesTreeView.selectedNodes.length !== 1) return;
 
-  const selectedNode = ui.texturesTreeView.selectedNodes[0];
-  const textureName = selectedNode.dataset["name"];
+  const textureName = ui.texturesTreeView.selectedNodes[0].dataset["name"];
 
   const options = {
     initialValue: textureName,
     validationLabel: SupClient.i18n.t("common:actions.rename")
   };
 
-  /* tslint:disable:no-unused-expression */
   new SupClient.Dialogs.PromptDialog(SupClient.i18n.t("modelEditor:sidebar.advancedTextures.renameMapPrompt"), options, (newName) => {
-    /* tslint:enable:no-unused-expression */
     if (newName == null) return;
 
     data.projectClient.editAsset(SupClient.query.asset, "renameMap", textureName, newName);
@@ -438,9 +426,7 @@ function onDeleteMapClick() {
 
   const confirmLabel = SupClient.i18n.t("modelEditor:sidebar.advancedTextures.deleteMapConfirm");
   const validationLabel = SupClient.i18n.t("common:actions.delete");
-  /* tslint:disable:no-unused-expression */
   new SupClient.Dialogs.ConfirmDialog(confirmLabel, { validationLabel }, (confirmed) => {
-    /* tslint:enable:no-unused-expression */
     if (!confirmed) return;
 
     for (const selectedNode of ui.texturesTreeView.selectedNodes)
@@ -449,14 +435,13 @@ function onDeleteMapClick() {
 }
 
 export function updateSelectedMap() {
-  const selectedMapElt = ui.texturesTreeView.selectedNodes[0];
-  if (selectedMapElt != null) ui.selectedTextureName = selectedMapElt.dataset["name"];
-  else ui.selectedTextureName = null;
-
   const buttons = document.querySelectorAll(".textures-buttons button");
   for (let i = 0; i < buttons.length; i++) {
-    const button = <HTMLButtonElement>buttons[i];
-    button.disabled = ui.selectedTextureName == null && button.className !== "new-map";
+    const button = buttons[i] as HTMLButtonElement;
+    if (button.className === "new-map") continue;
+
+    if (button.className === "delete-map") button.disabled = ui.texturesTreeView.selectedNodes.length === 0;
+    else button.disabled = ui.texturesTreeView.selectedNodes.length !== 1;
   }
 }
 

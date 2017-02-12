@@ -6,7 +6,18 @@ import SpriteAnimations, { SpriteAnimationPub } from "./SpriteAnimations";
 
 // Reference to THREE, client-side only
 let THREE: typeof SupEngine.THREE;
-if ((<any>global).window != null && (<any>window).SupEngine != null) THREE = SupEngine.THREE;
+if ((global as any).window != null && (window as any).SupEngine != null) THREE = SupEngine.THREE;
+
+type SetMapsCallback = SupCore.Data.Base.ErrorCallback & ((err: string, ack: any, maps: any) => void);
+type NewMapCallback = SupCore.Data.Base.ErrorCallback & ((err: string, ack: any, name: string) => void);
+type DeleteMapCallback = SupCore.Data.Base.ErrorCallback & ((err: string, ack: any, name: string) => void);
+type RenameMapCallback = SupCore.Data.Base.ErrorCallback & ((err: string, ack: any, oldName: string, newName: string) => void);
+type SetMapSlotCallback = SupCore.Data.Base.ErrorCallback & ((err: string, ack: any, slot: string, name: string) => void);
+
+type NewAnimationCallback = SupCore.Data.Base.ErrorCallback & ((err: string, animationId: string, animation: SpriteAnimationPub, index: number) => void);
+type DeleteAnimationCallback = SupCore.Data.Base.ErrorCallback & ((err: string, ack: any, id: string) => void);
+type MoveAnimationCallback = SupCore.Data.Base.ErrorCallback & ((err: string, ack: any, id: string, index: number) => void);
+type SetAnimationPropertyCallback = SupCore.Data.Base.ErrorCallback & ((err: string, ack: any, id: string, key: string, actualValue: any) => void);
 
 interface TextureWithSize extends THREE.Texture {
   size?: {
@@ -102,6 +113,8 @@ export default class SpriteAsset extends SupCore.Data.Base.Asset {
 
   init(options: any, callback: Function) {
     this.server.data.resources.acquire("spriteSettings", null, (err: Error, spriteSettings: any) => {
+      this.server.data.resources.release("spriteSettings", null);
+
       this.pub = {
         formatVersion: SpriteAsset.currentFormatVersion,
 
@@ -128,7 +141,6 @@ export default class SpriteAsset extends SupCore.Data.Base.Asset {
         }
       };
 
-      this.server.data.resources.release("spriteSettings", null);
       super.init(options, callback);
     });
   }
@@ -139,8 +151,8 @@ export default class SpriteAsset extends SupCore.Data.Base.Asset {
 
   load(assetPath: string) {
     let pub: SpriteAssetPub;
-    let loadMaps = () => {
-      let mapsName: string[] = <any>pub.maps;
+    const loadMaps = () => {
+      let mapsName: string[] = pub.maps as any;
       // NOTE: Support for multiple maps was introduced in Superpowers 0.11
       if (mapsName == null) mapsName = ["map"];
 
@@ -209,7 +221,7 @@ export default class SpriteAsset extends SupCore.Data.Base.Asset {
       }
 
       // NOTE: Animation speed was introduced in Superpowers 0.12
-      for (let animation of pub.animations) {
+      for (const animation of pub.animations) {
         if (animation.speed == null) animation.speed = 1;
       }
       pub.formatVersion = 1;
@@ -231,60 +243,80 @@ export default class SpriteAsset extends SupCore.Data.Base.Asset {
 
   client_load() {
     this.mapObjectURLs = {};
-    this._loadTextures();
+    this.loadTextures();
   }
 
   client_unload() {
-    this._unloadTextures();
+    this.unloadTextures();
   }
 
-  save(assetPath: string, saveCallback: Function) {
-    let maps = this.pub.maps;
-    let mapsName = <string[]>[];
-    for (let key in maps) {
-      if (maps[key] != null) mapsName.push(key);
+  save(outputPath: string, callback: (err: Error) => void) {
+    this.write(fs.writeFile, outputPath, (err) => {
+      if (err != null) { callback(err); return; }
+
+      // Clean up old maps from disk
+      async.each(Object.keys(this.pub.maps), (key, cb) => {
+        const value = this.pub.maps[key];
+        if (value != null) { cb(); return; }
+
+        fs.unlink(path.join(outputPath, `map-${key}.dat`), (err) => {
+          if (err != null && err.code !== "ENOENT") { cb(err); return; }
+          cb();
+        });
+      }, callback);
+    });
+  }
+
+  clientExport(outputPath: string, callback: (err: Error) => void) {
+    this.write(SupApp.writeFile, outputPath, callback);
+  }
+
+  private write(writeFile: Function, outputPath: string, writeCallback: (err: Error) => void) {
+    const maps = this.pub.maps;
+
+    (this.pub as any).maps = [];
+    for (const mapName in maps) {
+      if (maps[mapName] != null) (this.pub as any).maps.push(mapName);
     }
-    (<any>this.pub).maps = mapsName;
-    let json = JSON.stringify(this.pub, null, 2);
+
+    const textures = this.pub.textures;
+    delete this.pub.textures;
+
+    const json = JSON.stringify(this.pub, null, 2);
+
     this.pub.maps = maps;
+    this.pub.textures = textures;
 
     async.series([
-      (callback) => { fs.writeFile(path.join(assetPath, "sprite.json"), json, { encoding: "utf8" }, (err) => { callback(err, null); }); },
+      (callback) => { writeFile(path.join(outputPath, "sprite.json"), json, { encoding: "utf8" }, callback); },
 
       (callback) => {
-        async.each(mapsName, (key, cb) => {
+        async.each(Object.keys(maps), (key, cb) => {
           let value = maps[key];
+          if (value == null) { cb(); return; }
+          if (value instanceof ArrayBuffer) value = new Buffer(value);
 
-          if (value == null) {
-            fs.unlink(path.join(assetPath, `map-${key}.dat`), (err) => {
-              if (err != null && err.code !== "ENOENT") { cb(err); return; }
-              cb();
-            });
-            return;
-          }
-
-          fs.writeFile(path.join(assetPath, `map-${key}.dat`), value, cb);
-        }, (err) => { callback(err, null); });
+          writeFile(path.join(outputPath, `map-${key}.dat`), value, cb);
+        }, callback);
       }
-
-    ], (err) => { saveCallback(err); });
+    ], writeCallback);
   }
 
-  _unloadTextures() {
-    for (let textureName in this.pub.textures) this.pub.textures[textureName].dispose();
+  private unloadTextures() {
+    for (const textureName in this.pub.textures) this.pub.textures[textureName].dispose();
 
-    for (let key in this.mapObjectURLs) {
+    for (const key in this.mapObjectURLs) {
       URL.revokeObjectURL(this.mapObjectURLs[key]);
       delete this.mapObjectURLs[key];
     }
   }
 
-  _loadTextures() {
-    this._unloadTextures();
+  private loadTextures() {
+    this.unloadTextures();
     this.pub.textures = {};
 
     Object.keys(this.pub.maps).forEach((key) => {
-      let buffer: any = this.pub.maps[key];
+      const buffer: any = this.pub.maps[key];
       if (buffer == null || buffer.byteLength === 0) return;
 
       let texture = this.pub.textures[key];
@@ -307,8 +339,8 @@ export default class SpriteAsset extends SupCore.Data.Base.Asset {
           texture.wrapT = SupEngine.THREE.MirroredRepeatWrapping;
         }
 
-        let typedArray = new Uint8Array(buffer);
-        let blob = new Blob([ typedArray ], { type: "image/*" });
+        const typedArray = new Uint8Array(buffer);
+        const blob = new Blob([ typedArray ], { type: "image/*" });
         image.src = this.mapObjectURLs[key] = URL.createObjectURL(blob);
       }
 
@@ -329,8 +361,8 @@ export default class SpriteAsset extends SupCore.Data.Base.Asset {
 
     switch (path) {
       case "filtering":
-        for (let textureName in this.pub.textures) {
-          let texture = this.pub.textures[textureName];
+        for (const textureName in this.pub.textures) {
+          const texture = this.pub.textures[textureName];
           if (this.pub.filtering === "pixelated") {
             texture.magFilter = THREE.NearestFilter;
             texture.minFilter = THREE.NearestFilter;
@@ -342,8 +374,8 @@ export default class SpriteAsset extends SupCore.Data.Base.Asset {
         }
         break;
       case "wrapping":
-        for (let textureName in this.pub.textures) {
-          let texture = this.pub.textures[textureName];
+        for (const textureName in this.pub.textures) {
+          const texture = this.pub.textures[textureName];
           if (value === "clampToEdge") {
             texture.wrapS = SupEngine.THREE.ClampToEdgeWrapping;
             texture.wrapT = SupEngine.THREE.ClampToEdgeWrapping;
@@ -360,32 +392,32 @@ export default class SpriteAsset extends SupCore.Data.Base.Asset {
     }
   }
 
-  server_setMaps(client: any, maps: any, callback: (err: string, maps?: any) => any) {
+  server_setMaps(client: SupCore.RemoteClient, maps: any, callback: SetMapsCallback) {
     if (maps == null || typeof maps !== "object") { callback("Maps must be an object"); return; }
 
-    for (let key in maps) {
-      let value = maps[key];
+    for (const key in maps) {
+      const value = maps[key];
       if (this.pub.maps[key] == null) { callback(`The map ${key} doesn't exist`); return; }
       if (value != null && !(value instanceof Buffer)) { callback(`Value for ${key} must be an ArrayBuffer or null`); return; }
     }
 
-    for (let key in maps) this.pub.maps[key] = maps[key];
+    for (const key in maps) this.pub.maps[key] = maps[key];
 
-    callback(null, maps);
+    callback(null, null, maps);
     this.emit("change");
   }
 
   client_setMaps(maps: any) {
-    for (let key in maps) this.pub.maps[key] = maps[key];
-    this._loadTextures();
+    for (const key in maps) this.pub.maps[key] = maps[key];
+    this.loadTextures();
   }
 
-  server_newMap(client: any, name: string, callback: (err: string, name: string) => any) {
-    if (name == null || typeof name !== "string") { callback("Name of the map must be a string", null); return; }
-    if (this.pub.maps[name] != null) { callback(`The map ${name} already exists`, null); return; }
+  server_newMap(client: SupCore.RemoteClient, name: string, callback: NewMapCallback) {
+    if (name == null || typeof name !== "string") { callback("Name of the map must be a string"); return; }
+    if (this.pub.maps[name] != null) { callback(`The map ${name} already exists`); return; }
 
     this.pub.maps[name] = new Buffer(0);
-    callback(null, name);
+    callback(null, null, name);
     this.emit("change");
   }
 
@@ -393,20 +425,20 @@ export default class SpriteAsset extends SupCore.Data.Base.Asset {
     this.pub.maps[name] = new Buffer(0);
   }
 
-  server_deleteMap(client: any, name: string, callback: (err: string, name: string) => any) {
-    if (name == null || typeof name !== "string") { callback("Name of the map must be a string", null); return; }
-    if (this.pub.maps[name] == null) { callback(`The map ${name} doesn't exist`, null); return; }
+  server_deleteMap(client: SupCore.RemoteClient, name: string, callback: DeleteMapCallback) {
+    if (name == null || typeof name !== "string") { callback("Name of the map must be a string"); return; }
+    if (this.pub.maps[name] == null) { callback(`The map ${name} doesn't exist`); return; }
 
-    if (this.pub.mapSlots["map"] === name) { callback(`The main map can't be deleted`, null); return; }
+    if (this.pub.mapSlots["map"] === name) { callback(`The main map can't be deleted`); return; }
 
     this.client_deleteMap(name);
-    callback(null, name);
+    callback(null, null, name);
     this.emit("change");
   }
 
   client_deleteMap(name: string) {
-    for (let slotName in this.pub.mapSlots) {
-      let map = this.pub.mapSlots[slotName];
+    for (const slotName in this.pub.mapSlots) {
+      const map = this.pub.mapSlots[slotName];
       if (map === name) this.pub.mapSlots[slotName] = null;
     }
 
@@ -414,13 +446,13 @@ export default class SpriteAsset extends SupCore.Data.Base.Asset {
     this.pub.maps[name] = null;
   }
 
-  server_renameMap(client: any, oldName: string, newName: string, callback: (err: string, oldName: string, newName: string) => any) {
-    if (oldName == null || typeof oldName !== "string") { callback("Name of the map must be a string", null, null); return; }
-    if (newName == null || typeof newName !== "string") { callback("New name of the map must be a string", null, null); return; }
-    if (this.pub.maps[newName] != null) { callback(`The map ${newName} already exists`, null, null); return; }
+  server_renameMap(client: SupCore.RemoteClient, oldName: string, newName: string, callback: RenameMapCallback) {
+    if (oldName == null || typeof oldName !== "string") { callback("Name of the map must be a string"); return; }
+    if (newName == null || typeof newName !== "string") { callback("New name of the map must be a string"); return; }
+    if (this.pub.maps[newName] != null) { callback(`The map ${newName} already exists`); return; }
 
     this.client_renameMap(oldName, newName);
-    callback(null, oldName, newName);
+    callback(null, null, oldName, newName);
     this.emit("change");
   }
 
@@ -428,20 +460,20 @@ export default class SpriteAsset extends SupCore.Data.Base.Asset {
     this.pub.maps[newName] = this.pub.maps[oldName];
     this.pub.maps[oldName] = null;
 
-    for (let slotName in this.pub.mapSlots) {
-      let map = this.pub.mapSlots[slotName];
+    for (const slotName in this.pub.mapSlots) {
+      const map = this.pub.mapSlots[slotName];
       if (map === oldName) this.pub.mapSlots[slotName] = newName;
     }
   }
 
-  server_setMapSlot(client: any, slot: string, map: string, callback: (err: string, slot: string, map: string) => any) {
-    if (slot == null || typeof slot !== "string") { callback("Name of the slot must be a string", null, null); return; }
-    if (map != null && typeof map !== "string") { callback("Name of the map must be a string", null, null); return; }
-    if (map != null && this.pub.maps[map] == null) { callback(`The map ${map} doesn't exist`, null, null); return; }
-    if (slot === "map" && map == null) { callback(`The main map can't be empty`, null, null); return; }
+  server_setMapSlot(client: SupCore.RemoteClient, slot: string, map: string, callback: SetMapSlotCallback) {
+    if (slot == null || typeof slot !== "string") { callback("Name of the slot must be a string"); return; }
+    if (map != null && typeof map !== "string") { callback("Name of the map must be a string"); return; }
+    if (map != null && this.pub.maps[map] == null) { callback(`The map ${map} doesn't exist`); return; }
+    if (slot === "map" && map == null) { callback(`The main map can't be empty`); return; }
 
     this.pub.mapSlots[slot] = map;
-    callback(null, slot, map);
+    callback(null, null, slot, map);
     this.emit("change");
   }
 
@@ -449,15 +481,15 @@ export default class SpriteAsset extends SupCore.Data.Base.Asset {
     this.pub.mapSlots[slot] = map;
   }
 
-  server_newAnimation(client: any, name: string, callback: (err: string, animation?: SpriteAnimationPub, actualIndex?: number) => any) {
-    let animation: SpriteAnimationPub = { id: null, name, startFrameIndex: 0, endFrameIndex: 0, speed: 1 };
+  server_newAnimation(client: SupCore.RemoteClient, name: string, callback: NewAnimationCallback) {
+    const animation: SpriteAnimationPub = { id: null, name, startFrameIndex: 0, endFrameIndex: 0, speed: 1 };
 
     this.animations.add(animation, null, (err, actualIndex) => {
       if (err != null) { callback(err); return; }
 
       animation.name = SupCore.Data.ensureUniqueName(animation.id, animation.name, this.animations.pub);
 
-      callback(null, animation, actualIndex);
+      callback(null, animation.id, animation, actualIndex);
       this.emit("change");
     });
   }
@@ -466,11 +498,11 @@ export default class SpriteAsset extends SupCore.Data.Base.Asset {
     this.animations.client_add(animation, actualIndex);
   }
 
-  server_deleteAnimation(client: any, id: string, callback: (err: string, id?: string) => any) {
+  server_deleteAnimation(client: SupCore.RemoteClient, id: string, callback: DeleteAnimationCallback) {
     this.animations.remove(id, (err) => {
       if (err != null) { callback(err); return; }
 
-      callback(null, id);
+      callback(null, null, id);
       this.emit("change");
     });
   }
@@ -480,11 +512,11 @@ export default class SpriteAsset extends SupCore.Data.Base.Asset {
     return;
   }
 
-  server_moveAnimation(client: any, id: string, newIndex: number, callback: (err: string, id?: string, actualIndex?: number) => any) {
+  server_moveAnimation(client: SupCore.RemoteClient, id: string, newIndex: number, callback: MoveAnimationCallback) {
     this.animations.move(id, newIndex, (err, actualIndex) => {
       if (err != null) { callback(err); return; }
 
-      callback(null, id, actualIndex);
+      callback(null, null, id, actualIndex);
       this.emit("change");
     });
   }
@@ -493,7 +525,7 @@ export default class SpriteAsset extends SupCore.Data.Base.Asset {
     this.animations.client_move(id, newIndex);
   }
 
-  server_setAnimationProperty(client: any, id: string, key: string, value: any, callback: (err: string, id?: string, key?: string, actualValue?: any) => any) {
+  server_setAnimationProperty(client: SupCore.RemoteClient, id: string, key: string, value: any, callback: SetAnimationPropertyCallback) {
     if (key === "name") {
       if (typeof(value) !== "string") { callback("Invalid value"); return; }
       value = value.trim();
@@ -506,7 +538,7 @@ export default class SpriteAsset extends SupCore.Data.Base.Asset {
     this.animations.setProperty(id, key, value, (err, actualValue) => {
       if (err != null) { callback(err); return; }
 
-      callback(null, id, key, actualValue);
+      callback(null, null, id, key, actualValue);
       this.emit("change");
     });
   }

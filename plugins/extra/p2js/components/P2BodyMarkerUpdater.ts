@@ -1,10 +1,11 @@
 import P2BodyMarker from "./P2BodyMarker";
+import { P2BodyConfigPub } from "../componentConfigs/P2BodyConfig";
 
 export default class P2BodyMarkerUpdater {
   bodyRenderer: P2BodyMarker;
-  config: any;
+  config: P2BodyConfigPub;
 
-  constructor(client: any, bodyRenderer: P2BodyMarker, config: any) {
+  constructor(client: SupClient.ProjectClient, bodyRenderer: P2BodyMarker, config: P2BodyConfigPub) {
     this.bodyRenderer = bodyRenderer;
     this.config = config;
 
@@ -13,6 +14,7 @@ export default class P2BodyMarkerUpdater {
       case "circle": { this.bodyRenderer.setCircle(this.config.radius); } break;
     }
     this.bodyRenderer.setOffset(this.config.offsetX, this.config.offsetY);
+    this.bodyRenderer.setAngle(this.config.angle);
   }
 
   destroy() { /* Ignore */ }
@@ -28,6 +30,10 @@ export default class P2BodyMarkerUpdater {
 
     if (path === "offsetX" || path === "offsetY") {
       this.bodyRenderer.setOffset(this.config.offsetX, this.config.offsetY);
+    }
+
+    if (path === "angle") {
+      this.bodyRenderer.setAngle(this.config.angle);
     }
   }
 }

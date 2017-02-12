@@ -1,4 +1,4 @@
-interface CameraConfigPub {
+export interface CameraConfigPub {
   formatVersion: number;
 
   mode: string;
@@ -33,7 +33,7 @@ export default class CameraConfig extends SupCore.Data.Base.ComponentConfig {
   };
 
   static create() {
-    let emptyConfig: CameraConfigPub = {
+    const emptyConfig: CameraConfigPub = {
       formatVersion: CameraConfig.currentFormatVersion,
 
       mode: "perspective",

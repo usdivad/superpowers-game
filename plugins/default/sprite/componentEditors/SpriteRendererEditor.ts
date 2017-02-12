@@ -10,17 +10,17 @@ export default class SpriteRendererEditor {
   animationId: string;
   shaderAssetId: string;
 
-  spriteTextField: HTMLInputElement;
-  spriteButtonElt: HTMLButtonElement;
-  animationSelectBox: HTMLSelectElement;
+  spriteFieldSubscriber: SupClient.table.AssetFieldSubscriber;
+  shaderFieldSubscriber: SupClient.table.AssetFieldSubscriber;
 
+  animationSelectBox: HTMLSelectElement;
   horizontalFlipField: HTMLInputElement;
   verticalFlipField: HTMLInputElement;
 
   castShadowField: HTMLInputElement;
   receiveShadowField: HTMLInputElement;
 
-  colorField: HTMLInputElement;
+  colorField: SupClient.table.ColorField;
   colorPicker: HTMLInputElement;
 
   overrideOpacityField: HTMLInputElement;
@@ -29,8 +29,6 @@ export default class SpriteRendererEditor {
 
   materialSelectBox: HTMLSelectElement;
   shaderRow: HTMLTableRowElement;
-  shaderTextField: HTMLInputElement;
-  shaderButtonElt: HTMLButtonElement;
 
   asset: SpriteAsset;
   overrideOpacity: boolean;
@@ -47,28 +45,27 @@ export default class SpriteRendererEditor {
     this.overrideOpacity = config.overrideOpacity;
     this.opacity = config.opacity;
 
-    let spriteRow = SupClient.table.appendRow(tbody, SupClient.i18n.t("componentEditors:SpriteRenderer.sprite"));
-    let spriteFields = SupClient.table.appendAssetField(spriteRow.valueCell, "");
-    this.spriteTextField = spriteFields.textField;
-    this.spriteTextField.addEventListener("input", this.onChangeSpriteAsset);
-    this.spriteTextField.disabled = true;
-    this.spriteButtonElt = spriteFields.buttonElt;
-    this.spriteButtonElt.addEventListener("click", (event) => {
-      window.parent.postMessage({ type: "openEntry", id: this.spriteAssetId }, window.location.origin);
+    const spriteRow = SupClient.table.appendRow(tbody, SupClient.i18n.t("componentEditors:SpriteRenderer.sprite"));
+    this.spriteFieldSubscriber = SupClient.table.appendAssetField(spriteRow.valueCell, this.spriteAssetId, "sprite", projectClient);
+    this.spriteFieldSubscriber.on("select", (assetId: string) => {
+      this.editConfig("setProperty", "spriteAssetId", assetId);
+      this.editConfig("setProperty", "animationId", null);
     });
-    this.spriteButtonElt.disabled = this.spriteAssetId == null;
 
-    let animationRow = SupClient.table.appendRow(tbody, SupClient.i18n.t("componentEditors:SpriteRenderer.animation"));
+    const animationRow = SupClient.table.appendRow(tbody, SupClient.i18n.t("componentEditors:SpriteRenderer.animation"));
     this.animationSelectBox = SupClient.table.appendSelectBox(animationRow.valueCell, { "": SupClient.i18n.t("componentEditors:SpriteRenderer.animationNone") });
-    this.animationSelectBox.addEventListener("change", this.onChangeSpriteAnimation);
+    this.animationSelectBox.addEventListener("change", (event: any) => {
+      const animationId = (event.target.value === "") ? null : event.target.value;
+      this.editConfig("setProperty", "animationId", animationId);
+    });
     this.animationSelectBox.disabled = true;
 
-    let flipRow = SupClient.table.appendRow(tbody, SupClient.i18n.t("componentEditors:SpriteRenderer.flip"));
-    let flipDiv = document.createElement("div") as HTMLDivElement;
+    const flipRow = SupClient.table.appendRow(tbody, SupClient.i18n.t("componentEditors:SpriteRenderer.flip"));
+    const flipDiv = document.createElement("div") as HTMLDivElement;
     flipDiv.classList.add("inputs");
     flipRow.valueCell.appendChild(flipDiv);
 
-    let horizontalSpan = document.createElement("span");
+    const horizontalSpan = document.createElement("span");
     horizontalSpan.style.marginLeft = "5px";
     horizontalSpan.textContent = "H";
     flipDiv.appendChild(horizontalSpan);
@@ -77,7 +74,7 @@ export default class SpriteRendererEditor {
       this.editConfig("setProperty", "horizontalFlip", event.target.checked);
     });
 
-    let verticalSpan = document.createElement("span");
+    const verticalSpan = document.createElement("span");
     verticalSpan.style.marginLeft = "5px";
     verticalSpan.textContent = "V";
     flipDiv.appendChild(verticalSpan);
@@ -86,12 +83,12 @@ export default class SpriteRendererEditor {
       this.editConfig("setProperty", "verticalFlip", event.target.checked);
     });
 
-    let shadowRow = SupClient.table.appendRow(tbody, SupClient.i18n.t("componentEditors:SpriteRenderer.shadow.title"));
-    let shadowDiv = document.createElement("div") as HTMLDivElement;
+    const shadowRow = SupClient.table.appendRow(tbody, SupClient.i18n.t("componentEditors:SpriteRenderer.shadow.title"));
+    const shadowDiv = document.createElement("div") as HTMLDivElement;
     shadowDiv.classList.add("inputs");
     shadowRow.valueCell.appendChild(shadowDiv);
 
-    let castSpan = document.createElement("span");
+    const castSpan = document.createElement("span");
     castSpan.style.marginLeft = "5px";
     castSpan.textContent = SupClient.i18n.t("componentEditors:SpriteRenderer.shadow.cast");
     shadowDiv.appendChild(castSpan);
@@ -99,9 +96,8 @@ export default class SpriteRendererEditor {
     this.castShadowField.addEventListener("change", (event: any) => {
       this.editConfig("setProperty", "castShadow", event.target.checked);
     });
-    this.castShadowField.disabled = true;
 
-    let receiveSpan = document.createElement("span");
+    const receiveSpan = document.createElement("span");
     receiveSpan.style.marginLeft = "5px";
     receiveSpan.textContent = SupClient.i18n.t("componentEditors:SpriteRenderer.shadow.receive");
     shadowDiv.appendChild(receiveSpan);
@@ -109,34 +105,25 @@ export default class SpriteRendererEditor {
     this.receiveShadowField.addEventListener("change", (event: any) => {
       this.editConfig("setProperty", "receiveShadow", event.target.checked);
     });
-    this.receiveShadowField.disabled = true;
 
-    let colorRow = SupClient.table.appendRow(tbody, SupClient.i18n.t("componentEditors:SpriteRenderer.color"));
-    let colorInputs = SupClient.table.appendColorField(colorRow.valueCell, config.color);
+    const colorRow = SupClient.table.appendRow(tbody, SupClient.i18n.t("componentEditors:SpriteRenderer.color"));
+    this.colorField = SupClient.table.appendColorField(colorRow.valueCell, config.color);
 
-    this.colorField = colorInputs.textField;
-    this.colorField.addEventListener("change", (event: any) => {
-      this.editConfig("setProperty", "color", event.target.value);
+    this.colorField.addListener("change", (color: string) => {
+      this.editConfig("setProperty", "color", color);
     });
-    this.colorField.disabled = true;
 
-    this.colorPicker = colorInputs.pickerField;
-    this.colorPicker.addEventListener("change", (event: any) => {
-      this.editConfig("setProperty", "color", event.target.value.slice(1));
-    });
-    this.colorPicker.disabled = true;
-
-    let opacityRow = SupClient.table.appendRow(tbody, SupClient.i18n.t("componentEditors:SpriteRenderer.opacity"), { checkbox: true } );
+    const opacityRow = SupClient.table.appendRow(tbody, SupClient.i18n.t("componentEditors:SpriteRenderer.opacity"), { checkbox: true } );
     this.overrideOpacityField = opacityRow.checkbox;
     this.overrideOpacityField.addEventListener("change", (event: any) => {
       this.editConfig("setProperty", "opacity", this.asset != null ? this.asset.pub.opacity : null);
       this.editConfig("setProperty", "overrideOpacity", event.target.checked);
     });
 
-    let opacityParent = document.createElement("div");
+    const opacityParent = document.createElement("div");
     opacityRow.valueCell.appendChild(opacityParent);
 
-    let transparentOptions: {[key: string]: string} = {
+    const transparentOptions: {[key: string]: string} = {
       empty: "",
       opaque: SupClient.i18n.t("componentEditors:SpriteRenderer.opaque"),
       transparent: SupClient.i18n.t("componentEditors:SpriteRenderer.transparent"),
@@ -144,7 +131,7 @@ export default class SpriteRendererEditor {
     this.transparentField = SupClient.table.appendSelectBox(opacityParent, transparentOptions);
     (this.transparentField.children[0] as HTMLOptionElement).hidden = true;
     this.transparentField.addEventListener("change", (event) => {
-      let opacity = this.transparentField.value === "transparent" ? 1 : null;
+      const opacity = this.transparentField.value === "transparent" ? 1 : null;
       this.editConfig("setProperty", "opacity", opacity);
     });
 
@@ -154,31 +141,26 @@ export default class SpriteRendererEditor {
     });
     this.updateOpacityField();
 
-    let materialRow = SupClient.table.appendRow(tbody, SupClient.i18n.t("componentEditors:SpriteRenderer.material"));
+    const materialRow = SupClient.table.appendRow(tbody, SupClient.i18n.t("componentEditors:SpriteRenderer.material"));
     this.materialSelectBox = SupClient.table.appendSelectBox(materialRow.valueCell, { "basic": "Basic", "phong": "Phong", "shader": "Shader" }, config.materialType);
     this.materialSelectBox.addEventListener("change", (event: any) => {
       this.editConfig("setProperty", "materialType", event.target.value);
     });
-    this.materialSelectBox.disabled = true;
 
-    let shaderRow = SupClient.table.appendRow(tbody, SupClient.i18n.t("componentEditors:SpriteRenderer.shader"));
+    const shaderRow = SupClient.table.appendRow(tbody, SupClient.i18n.t("componentEditors:SpriteRenderer.shader"));
     this.shaderRow = shaderRow.row;
-    let shaderFields = SupClient.table.appendAssetField(shaderRow.valueCell, "");
-    this.shaderTextField = shaderFields.textField;
-    this.shaderTextField.addEventListener("input", this.onChangeShaderAsset);
-    this.shaderTextField.disabled = true;
-    this.shaderButtonElt = shaderFields.buttonElt;
-    this.shaderButtonElt.addEventListener("click", (event) => {
-      window.parent.postMessage({ type: "openEntry", id: this.shaderAssetId }, window.location.origin);
+    this.shaderFieldSubscriber = SupClient.table.appendAssetField(shaderRow.valueCell, this.shaderAssetId, "shader", projectClient);
+    this.shaderFieldSubscriber.on("select", (assetId: string) => {
+      this.editConfig("setProperty", "shaderAssetId", assetId);
     });
-    this.shaderButtonElt.disabled = this.shaderAssetId == null;
     this.shaderRow.hidden = config.materialType !== "shader";
 
-    this.projectClient.subEntries(this);
+    if (this.spriteAssetId != null) this.projectClient.subAsset(this.spriteAssetId, "sprite", this);
   }
 
   destroy() {
-    this.projectClient.unsubEntries(this);
+    this.spriteFieldSubscriber.destroy();
+    this.shaderFieldSubscriber.destroy();
 
     if (this.spriteAssetId != null) this.projectClient.unsubAsset(this.spriteAssetId, this);
   }
@@ -189,18 +171,14 @@ export default class SpriteRendererEditor {
     switch (path) {
       case "spriteAssetId":
         if (this.spriteAssetId != null) {
-          this.asset = null;
           this.projectClient.unsubAsset(this.spriteAssetId, this);
+          this.asset = null;
         }
         this.spriteAssetId = value;
-        this.spriteButtonElt.disabled = this.spriteAssetId == null;
         this.animationSelectBox.disabled = true;
 
-        if (this.spriteAssetId != null) {
-          this.spriteTextField.value = this.projectClient.entries.getPathFromId(this.spriteAssetId);
-          this.projectClient.subAsset(this.spriteAssetId, "sprite", this);
-        }
-        else this.spriteTextField.value = "";
+        if (this.spriteAssetId != null) this.projectClient.subAsset(this.spriteAssetId, "sprite", this);
+        this.spriteFieldSubscriber.onChangeAssetId(this.spriteAssetId);
         break;
 
       case "animationId":
@@ -225,8 +203,7 @@ export default class SpriteRendererEditor {
         break;
 
       case "color":
-        this.colorField.value = value;
-        this.colorPicker.value = `#${value}`;
+        this.colorField.setValue(value);
         break;
 
       case "overrideOpacity":
@@ -246,59 +223,19 @@ export default class SpriteRendererEditor {
 
       case "shaderAssetId":
         this.shaderAssetId = value;
-        this.shaderButtonElt.disabled = this.shaderAssetId == null;
-        if (value != null) this.shaderTextField.value = this.projectClient.entries.getPathFromId(value);
-        else this.shaderTextField.value = "";
+        this.shaderFieldSubscriber.onChangeAssetId(this.shaderAssetId);
         break;
     }
   }
 
   // Network callbacks
-  onEntriesReceived(entries: SupCore.Data.Entries) {
-    this.spriteTextField.disabled = false;
-    this.castShadowField.disabled = false;
-    this.receiveShadowField.disabled = false;
-    this.colorField.disabled = false;
-    this.colorPicker.disabled = false;
-    this.materialSelectBox.disabled = false;
-    this.shaderTextField.disabled = false;
-
-    if (entries.byId[this.spriteAssetId] != null) {
-      this.spriteTextField.value = entries.getPathFromId(this.spriteAssetId);
-      this.projectClient.subAsset(this.spriteAssetId, "sprite", this);
-    }
-
-    if (entries.byId[this.shaderAssetId] != null) {
-      this.shaderTextField.value = entries.getPathFromId(this.shaderAssetId);
-    }
-  }
-
-  onEntryAdded(entry: any, parentId: string, index: number) { /* Ignore */ }
-  onEntryMoved(id: string, parentId: string, index: number) {
-    if (id === this.spriteAssetId) {
-      this.spriteTextField.value = this.projectClient.entries.getPathFromId(this.spriteAssetId);
-    } else if (id === this.shaderAssetId) {
-      this.shaderTextField.value = this.projectClient.entries.getPathFromId(this.shaderAssetId);
-    }
-  }
-  onSetEntryProperty(id: string, key: string, value: any) {
-    if (key !== "name") return;
-
-    if (id === this.spriteAssetId) {
-      this.spriteTextField.value = this.projectClient.entries.getPathFromId(this.spriteAssetId);
-    } else if (id === this.shaderAssetId) {
-      this.shaderTextField.value = this.projectClient.entries.getPathFromId(this.shaderAssetId);
-    }
-  }
-  onEntryTrashed(id: string) { /* Ignore */ }
-
   onAssetReceived(assetId: string, asset: any) {
     if (assetId !== this.spriteAssetId) return;
     this.asset = asset;
 
     this._clearAnimations();
 
-    for (let animation of this.asset.pub.animations) {
+    for (const animation of this.asset.pub.animations) {
       SupClient.table.appendSelectOption(this.animationSelectBox, animation.id, animation.name);
     }
 
@@ -314,11 +251,11 @@ export default class SpriteRendererEditor {
     if (command === "setProperty" && args[0] === "opacity") this.updateOpacityField();
 
     if (command.indexOf("Animation") === -1) return;
-    let animationId = this.animationSelectBox.value;
+    const animationId = this.animationSelectBox.value;
 
     this._clearAnimations();
 
-    for (let animation of this.asset.pub.animations) {
+    for (const animation of this.asset.pub.animations) {
       SupClient.table.appendSelectOption(this.animationSelectBox, animation.id, animation.name);
     }
 
@@ -330,7 +267,6 @@ export default class SpriteRendererEditor {
     this.asset = null;
     this._clearAnimations();
 
-    this.spriteTextField.value = "";
     this.animationSelectBox.value = "";
     this.animationSelectBox.disabled = true;
   }
@@ -338,7 +274,7 @@ export default class SpriteRendererEditor {
   // User interface
   _clearAnimations() {
     while (true) {
-      let child = this.animationSelectBox.children[1];
+      const child = this.animationSelectBox.children[1];
       if (child == null) break;
       this.animationSelectBox.removeChild(child);
     }
@@ -354,7 +290,7 @@ export default class SpriteRendererEditor {
       this.transparentField.value = "empty";
       this.opacityFields.numberField.parentElement.hidden = true;
     } else {
-      let opacity = this.overrideOpacity ? this.opacity : this.asset.pub.opacity;
+      const opacity = this.overrideOpacity ? this.opacity : this.asset.pub.opacity;
       if (opacity != null) {
         this.transparentField.value = "transparent";
         this.opacityFields.numberField.parentElement.hidden = false;
@@ -366,31 +302,4 @@ export default class SpriteRendererEditor {
       }
     }
   }
-
-  private onChangeSpriteAsset = (event: any) => {
-    if (event.target.value === "") {
-      this.editConfig("setProperty", "spriteAssetId", null);
-      this.editConfig("setProperty", "animationId", null);
-    }
-    else {
-      let entry = SupClient.findEntryByPath(this.projectClient.entries.pub, event.target.value);
-      if (entry != null && entry.type === "sprite") {
-        this.editConfig("setProperty", "spriteAssetId", entry.id);
-        this.editConfig("setProperty", "animationId", null);
-      }
-    }
-  };
-
-  private onChangeSpriteAnimation = (event: any) => {
-    let animationId = (event.target.value === "") ? null : event.target.value;
-    this.editConfig("setProperty", "animationId", animationId);
-  };
-
-  private onChangeShaderAsset = (event: any) => {
-    if (event.target.value === "") this.editConfig("setProperty", "shaderAssetId", null);
-    else {
-      let entry = SupClient.findEntryByPath(this.projectClient.entries.pub, event.target.value);
-      if (entry != null && entry.type === "shader") this.editConfig("setProperty", "shaderAssetId", entry.id);
-    }
-  };
 }

@@ -1,6 +1,8 @@
 import * as path from "path";
 import * as fs from "fs";
 
+type UploadCallback = SupCore.Data.Base.ErrorCallback & ((err: string, ack: any, sound: Buffer) => void);
+
 interface SoundAssetPub {
   formatVersion: number;
   sound: Buffer;
@@ -63,22 +65,33 @@ export default class SoundAsset extends SupCore.Data.Base.Asset {
     callback(true);
   }
 
-  save(assetPath: string, callback: Function) {
+  save(outputPath: string, callback: (err: Error) => void) {
+    this.write(fs.writeFile, outputPath, callback);
+  }
+
+  clientExport(outputPath: string, callback: (err: Error) => void) {
+    this.write(SupApp.writeFile, outputPath, callback);
+  }
+
+  private write(writeFile: Function, assetPath: string, callback: (err: Error) => void) {
     let buffer = this.pub.sound;
     delete this.pub.sound;
-    let json = JSON.stringify(this.pub, null, 2);
+    const  json = JSON.stringify(this.pub, null, 2);
     this.pub.sound = buffer;
-    fs.writeFile(path.join(assetPath, "sound.json"), json, { encoding: "utf8" }, () => {
-      fs.writeFile(path.join(assetPath, "sound.dat"), buffer, callback);
+
+    if (buffer instanceof ArrayBuffer) buffer = new Buffer(buffer);
+
+    writeFile(path.join(assetPath, "sound.json"), json, { encoding: "utf8" }, () => {
+      writeFile(path.join(assetPath, "sound.dat"), buffer, callback);
     });
   }
 
-  server_upload(client: any, sound: Buffer, callback: (err: string, sound?: Buffer) => any) {
+  server_upload(client: SupCore.RemoteClient, sound: Buffer, callback: UploadCallback) {
     if (!(sound instanceof Buffer)) { callback("Sound must be an ArrayBuffer"); return; }
 
     this.pub.sound = sound;
 
-    callback(null, sound);
+    callback(null, null, sound);
     this.emit("change");
   }
 

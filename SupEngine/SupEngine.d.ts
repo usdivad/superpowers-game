@@ -1,18 +1,15 @@
-/// <reference path="../../../typings/tsd.d.ts" />
-/// <reference path="./typings/tsd.d.ts" />
-
-declare let __tmpTHREE: typeof THREE;
+declare const __tmpTHREE: typeof THREE;
 
 declare namespace SupEngine {
-  export let THREE: typeof __tmpTHREE;
+  export const THREE: typeof __tmpTHREE;
 
-  export let editorComponentClasses: { [name: string]: any };
+  export const editorComponentClasses: { [name: string]: any };
   export function registerEditorComponentClass(name: string, component: any): void;
 
-  export let componentClasses: { [name: string]: any };
+  export const componentClasses: { [name: string]: any };
   export function registerComponentClass(name: string, plugin: any): void;
 
-  export let earlyUpdateFunctions: { [name: string]: (gameInstance: GameInstance) => void };
+  export const earlyUpdateFunctions: { [name: string]: (gameInstance: GameInstance) => void };
   export function registerEarlyUpdateFunction(name: string, callback: (gameInstance: GameInstance) => void): void;
 
   class GameInstance extends EventEmitter {
@@ -118,7 +115,8 @@ declare namespace SupEngine {
     actor: Actor;
     typeName: string;
 
-    static Updater: new(projectClient: any, component: any, config: any, receiveAssetCallbacks: any, editAssetCallbacks: any) => ActorComponentUpdater;
+    /* tslint:disable-next-line */
+    static Updater: new(projectClient: any, component: any, config: any) => ActorComponentUpdater;
 
     constructor(actor: Actor, typeName: string);
     _destroy(): void;
@@ -139,6 +137,7 @@ declare namespace SupEngine {
 
   interface MouseButtonState {
     isDown: boolean;
+    doubleClicked: boolean;
     wasJustPressed: boolean;
     wasJustReleased: boolean;
   }
@@ -209,7 +208,6 @@ declare namespace SupEngine {
     getContext(): AudioContext;
   }
 
-  enum SoundStates { playing, paused, stopped }
   class SoundPlayer {
     audioCtx: AudioContext;
     audioMasterGain: GainNode;
@@ -221,7 +219,7 @@ declare namespace SupEngine {
     offset: number;
     startTime: number;
     isLooping: boolean;
-    state: SoundStates;
+    state: SoundPlayer.State;
     volume: number;
     pitch: number;
     pan: number;
@@ -231,23 +229,30 @@ declare namespace SupEngine {
     play(): void;
     stop(): void;
     pause(): void;
-    getState(): SoundStates;
+    getState(): SoundPlayer.State;
     setLoop(isLooping: boolean): void;
     setVolume(volume: number): void;
     setPan(pan: number): void;
     setPitch(pitch: number): void;
   }
 
+  namespace SoundPlayer {
+    export enum State { Playing, Paused, Stopped }
+  }
+
   class EventEmitter implements NodeJS.EventEmitter {
-    addListener(event: string, listener: Function): EventEmitter;
-    on(event: string, listener: Function): EventEmitter;
-    once(event: string, listener: Function): EventEmitter;
-    removeListener(event: string, listener: Function): EventEmitter;
-    removeAllListeners(event?: string): EventEmitter;
-    setMaxListeners(n: number): EventEmitter;
+    addListener(event: string, listener: Function): this;
+    on(event: string, listener: Function): this;
+    once(event: string, listener: Function): this;
+    removeListener(event: string, listener: Function): this;
+    removeAllListeners(event?: string): this;
+    setMaxListeners(n: number): this;
     getMaxListeners(): number;
     listeners(event: string): Function[];
     emit(event: string, ...args: any[]): boolean;
     listenerCount(type: string): number;
+    prependListener(event: string | symbol, listener: Function): this;
+    prependOnceListener(event: string | symbol, listener: Function): this;
+    eventNames(): (string | symbol)[];
   }
 }

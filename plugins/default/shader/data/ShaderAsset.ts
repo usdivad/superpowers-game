@@ -9,6 +9,17 @@ import * as _ from "lodash";
 import Uniforms, { UniformPub } from "./Uniforms";
 import Attributes, { AttributePub } from "./Attributes";
 
+type NewUniformCallback = SupCore.Data.Base.ErrorCallback & ((err: string, ack: any, uniform: UniformPub, actualIndex: number) => void);
+type DeleteUniformCallback = SupCore.Data.Base.ErrorCallback & ((err: string, ack: any, id: string) => void);
+type SetUniformPropertyCallback = SupCore.Data.Base.ErrorCallback & ((err: string, ack: any, id: string, key: string, actualValue: any) => void);
+
+type NewAttributeCallback = SupCore.Data.Base.ErrorCallback & ((err: string, ack: any, attribute: AttributePub, actualIndex: number) => void);
+type DeleteAttributeCallback = SupCore.Data.Base.ErrorCallback & ((err: string, ack: any, id: string) => void);
+type SetAttributePropertyCallback = SupCore.Data.Base.ErrorCallback & ((err: string, ack: any, id: string, key: string, actualValue: any) => void);
+
+type EditShaderCallback = SupCore.Data.Base.ErrorCallback & ((err: string, ack: any, operationData: OperationData, revisionIndex: number) => void);
+type SaveShaderCallback = SupCore.Data.Base.ErrorCallback;
+
 interface ShaderCode {
   text: string;
   draft: string;
@@ -71,7 +82,7 @@ export default class ShaderAsset extends SupCore.Data.Base.Asset {
         for (let i = 0; i < textEditorSettings.pub.tabSize; i++) tab = tab + " ";
       } else tab = "\t";
 
-      let defaultVertexContent =
+      const defaultVertexContent =
 `varying vec2 vUv;
 
 void main() {
@@ -79,7 +90,7 @@ ${tab}vUv = uv;
 ${tab}gl_Position = projectionMatrix * modelViewMatrix * vec4(position,1.0);
 }
 `;
-      let defaultFragmentContent =
+      const defaultFragmentContent =
 `uniform sampler2D map;
 varying vec2 vUv;
 
@@ -118,7 +129,7 @@ ${tab}gl_FragColor = texture2D(map, vUv);
   load(assetPath: string) {
     let pub: ShaderAssetPub;
 
-    let loadShaders = () => {
+    const loadShaders = () => {
       // NOTE: Migration for Superpowers 0.10
       if (typeof pub.vertexShader === "string") {
         pub.vertexShader = {
@@ -196,81 +207,100 @@ ${tab}gl_FragColor = texture2D(map, vUv);
     callback(true);
   }
 
-  save(assetPath: string, callback: (err: Error) => any) {
+  save(outputPath: string, callback: (err: Error) => void) {
     // NOTE: Doing a clone here because of asynchronous operations below
-    // We should use the (future) asset locking system instead
-    let vertexShader = _.cloneDeep(this.pub.vertexShader);
+    // We should use the new asset locking system instead
+    const vertexShader = _.cloneDeep(this.pub.vertexShader);
+    const fragmentShader = _.cloneDeep(this.pub.fragmentShader);
+
+    this.write(fs.writeFile, outputPath, (err) => {
+      if (err != null) { callback(err); return; }
+
+      async.series([
+        (cb) => {
+          if (vertexShader.draft !== vertexShader.text) {
+            fs.writeFile(path.join(outputPath, "vertexShaderDraft.txt"), vertexShader.draft, { encoding: "utf8" }, (err) => {
+              if (err != null && err.code !== "ENOENT") cb(err);
+              else cb(null);
+            });
+          } else {
+            fs.unlink(path.join(outputPath, "vertexShaderDraft.txt"), (err) => {
+              if (err != null && err.code !== "ENOENT") cb(err);
+              else cb(null);
+            });
+          }
+        },
+
+        (cb) => {
+          if (fragmentShader.draft !== fragmentShader.text) {
+            fs.writeFile(path.join(outputPath, "fragmentShaderDraft.txt"), fragmentShader.draft, { encoding: "utf8" }, (err) => {
+              if (err != null && err.code !== "ENOENT") cb(err);
+              else cb(null);
+            });
+          } else {
+            fs.unlink(path.join(outputPath, "fragmentShaderDraft.txt"), (err) => {
+              if (err != null && err.code !== "ENOENT") cb(err);
+              else cb(null);
+            });
+          }
+        }
+      ], callback);
+    });
+  }
+
+  clientExport(outputPath: string, callback: (err: Error) => void) {
+    this.write(SupApp.writeFile, outputPath, callback);
+  }
+
+  private write(writeFile: Function, outputPath: string, callback: (err: Error) => void) {
+    // NOTE: Doing a clone here because of asynchronous operations below
+    // We should use the new asset locking system instead
+    const vertexShader = _.cloneDeep(this.pub.vertexShader);
+    const fragmentShader = _.cloneDeep(this.pub.fragmentShader);
     delete this.pub.vertexShader;
-    let fragmentShader = _.cloneDeep(this.pub.fragmentShader);
     delete this.pub.fragmentShader;
 
-    let json = JSON.stringify(this.pub, null, 2);
+    const json = JSON.stringify(this.pub, null, 2);
 
     this.pub.vertexShader = vertexShader;
     this.pub.fragmentShader = fragmentShader;
 
     // TODO: Rename to .glsl instead of .txt
     async.series([
-      (cb: (err: Error) => any) => {
-        fs.writeFile(path.join(assetPath, "shader.json"), json, { encoding: "utf8" }, (err) => {
+      (cb) => {
+        writeFile(path.join(outputPath, "shader.json"), json, { encoding: "utf8" }, (err: Error) => {
           if (err != null) cb(err);
           else cb(null);
         });
       },
-      (cb: (err: Error) => any) => {
-        fs.writeFile(path.join(assetPath, "vertexShader.txt"), vertexShader.text, { encoding: "utf8" }, (err) => {
+      (cb) => {
+        writeFile(path.join(outputPath, "vertexShader.txt"), vertexShader.text, { encoding: "utf8" }, (err: Error) => {
           if (err != null) cb(err);
           else cb(null);
         });
       },
-      (cb: (err: Error) => any) => {
-        if (vertexShader.draft !== vertexShader.text) {
-          fs.writeFile(path.join(assetPath, "vertexShaderDraft.txt"), vertexShader.draft, { encoding: "utf8" }, (err) => {
-            if (err != null && err.code !== "ENOENT") cb(err);
-            else cb(null);
-          });
-        } else {
-          fs.unlink(path.join(assetPath, "vertexShaderDraft.txt"), (err) => {
-            if (err != null && err.code !== "ENOENT") cb(err);
-            else cb(null);
-          });
-        }
-      },
-      (cb: (err: Error) => any) => {
-        fs.writeFile(path.join(assetPath, "fragmentShader.txt"), fragmentShader.text, { encoding: "utf8" }, (err) => {
+      (cb) => {
+        writeFile(path.join(outputPath, "fragmentShader.txt"), fragmentShader.text, { encoding: "utf8" }, (err: Error) => {
           if (err != null) cb(err);
           else cb(null);
         });
       },
-      (cb: (err: Error) => any) => {
-        if (fragmentShader.draft !== fragmentShader.text) {
-          fs.writeFile(path.join(assetPath, "fragmentShaderDraft.txt"), fragmentShader.draft, { encoding: "utf8" }, (err) => {
-            if (err != null && err.code !== "ENOENT") cb(err);
-            else cb(null);
-          });
-        } else {
-          fs.unlink(path.join(assetPath, "fragmentShaderDraft.txt"), (err) => {
-            if (err != null && err.code !== "ENOENT") cb(err);
-            else cb(null);
-          });
-        }
-      }
-    ], (err: Error) => { callback(err); });
+    ], callback);
   }
 
-  server_newUniform(client: any, name: string, callback: (err: string, uniform: UniformPub, actualIndex: number) => any) {
-    for (let uniform of this.pub.uniforms) {
+  server_newUniform(client: SupCore.RemoteClient, name: string, callback: NewUniformCallback) {
+    for (const uniform of this.pub.uniforms) {
       if (uniform.name === name) {
-        callback(`An uniform named ${name} already exists`, null, null);
+        callback(`An uniform named ${name} already exists`);
         return;
       }
     }
 
-    let uniform: UniformPub = { id: null, name, type: "f", value: "0.0" };
+    const uniform: UniformPub = { id: null, name, type: "f", value: "0.0" };
     this.uniforms.add(uniform, null, (err, actualIndex) => {
-      if (err != null) { callback(err, null, null); return; }
+      if (err != null) { callback(err); return; }
 
-      callback(null, uniform, actualIndex);
+      callback(null, null, uniform, actualIndex);
       this.emit("change");
     });
   }
@@ -279,11 +309,11 @@ ${tab}gl_FragColor = texture2D(map, vUv);
     this.uniforms.client_add(uniform, actualIndex);
   }
 
-  server_deleteUniform(client: any, id: string, callback: (err: string, id?: string) => any) {
+  server_deleteUniform(client: SupCore.RemoteClient, id: string, callback: DeleteUniformCallback) {
     this.uniforms.remove(id, (err) => {
       if (err != null) { callback(err); return; }
 
-      callback(null, id);
+      callback(null, null, id);
       this.emit("change");
     });
   }
@@ -293,7 +323,7 @@ ${tab}gl_FragColor = texture2D(map, vUv);
     return;
   }
 
-  server_setUniformProperty(client: any, id: string, key: string, value: any, callback: (err: string, id?: string, key?: string, actualValue?: any) => any) {
+  server_setUniformProperty(client: SupCore.RemoteClient, id: string, key: string, value: any, callback: SetUniformPropertyCallback) {
     if (key === "name") {
       if (typeof(value) !== "string") { callback("Invalid value"); return; }
       value = value.trim();
@@ -307,7 +337,7 @@ ${tab}gl_FragColor = texture2D(map, vUv);
     this.uniforms.setProperty(id, key, value, (err, actualValue) => {
       if (err != null) { callback(err); return; }
 
-      callback(null, id, key, actualValue);
+      callback(null, null, id, key, actualValue);
       this.emit("change");
     });
   }
@@ -316,19 +346,19 @@ ${tab}gl_FragColor = texture2D(map, vUv);
     this.uniforms.client_setProperty(id, key, actualValue);
   }
 
-  server_newAttribute(client: any, name: string, callback: (err: string, attribute: AttributePub, actualIndex: number) => any) {
-    for (let attribute of this.pub.attributes) {
+  server_newAttribute(client: SupCore.RemoteClient, name: string, callback: NewAttributeCallback) {
+    for (const attribute of this.pub.attributes) {
       if (attribute.name === name) {
-        callback(`An attribute named ${name} already exists`, null, null);
+        callback(`An attribute named ${name} already exists`);
         return;
       }
     }
 
-    let attribute: AttributePub = { id: null, name, type: "f" };
+    const attribute: AttributePub = { id: null, name, type: "f" };
     this.attributes.add(attribute, null, (err, actualIndex) => {
-      if (err != null) { callback(err, null, null); return; }
+      if (err != null) { callback(err); return; }
 
-      callback(null, attribute, actualIndex);
+      callback(null, null, attribute, actualIndex);
       this.emit("change");
     });
   }
@@ -337,11 +367,11 @@ ${tab}gl_FragColor = texture2D(map, vUv);
     this.attributes.client_add(attribute, actualIndex);
   }
 
-  server_deleteAttribute(client: any, id: string, callback: (err: string, id?: string) => any) {
+  server_deleteAttribute(client: SupCore.RemoteClient, id: string, callback: DeleteAttributeCallback) {
     this.attributes.remove(id, (err) => {
       if (err != null) { callback(err); return; }
 
-      callback(null, id);
+      callback(null, null, id);
       this.emit("change");
     });
   }
@@ -351,7 +381,7 @@ ${tab}gl_FragColor = texture2D(map, vUv);
     return;
   }
 
-  server_setAttributeProperty(client: any, id: string, key: string, value: any, callback: (err: string, id?: string, key?: string, actualValue?: any) => any) {
+  server_setAttributeProperty(client: SupCore.RemoteClient, id: string, key: string, value: any, callback: SetAttributePropertyCallback) {
     if (key === "name") {
       if (typeof(value) !== "string") { callback("Invalid value"); return; }
       value = value.trim();
@@ -365,7 +395,7 @@ ${tab}gl_FragColor = texture2D(map, vUv);
     this.attributes.setProperty(id, key, value, (err, actualValue) => {
       if (err != null) { callback(err); return; }
 
-      callback(null, id, key, actualValue);
+      callback(null, null, id, key, actualValue);
       this.emit("change");
     });
   }
@@ -374,7 +404,7 @@ ${tab}gl_FragColor = texture2D(map, vUv);
     this.attributes.client_setProperty(id, key, actualValue);
   }
 
-  server_editVertexShader(client: any, operationData: OperationData, revisionIndex: number, callback: (err: string, operationData?: any, revisionIndex?: number) => any) {
+  server_editVertexShader(client: SupCore.RemoteClient, operationData: OperationData, revisionIndex: number, callback: EditShaderCallback) {
     if (operationData.userId !== client.id) { callback("Invalid client id"); return; }
 
     let operation = new OT.TextOperation();
@@ -386,19 +416,19 @@ ${tab}gl_FragColor = texture2D(map, vUv);
     this.pub.vertexShader.draft = this.vertexDocument.text;
     this.pub.vertexShader.revisionId++;
 
-    callback(null, operation.serialize(), this.vertexDocument.getRevisionId() - 1);
+    callback(null, null, operation.serialize(), this.vertexDocument.getRevisionId() - 1);
     this.emit("change");
   }
 
   client_editVertexShader(operationData: OperationData, revisionIndex: number) {
-    let operation = new OT.TextOperation();
+    const operation = new OT.TextOperation();
     operation.deserialize(operationData);
     this.vertexDocument.apply(operation, revisionIndex);
     this.pub.vertexShader.draft = this.vertexDocument.text;
     this.pub.vertexShader.revisionId++;
   }
 
-  server_saveVertexShader(client: any, callback: (err: string) => any) {
+  server_saveVertexShader(client: SupCore.RemoteClient, callback: SaveShaderCallback) {
     this.pub.vertexShader.text = this.pub.vertexShader.draft;
     callback(null);
     this.emit("change");
@@ -408,7 +438,7 @@ ${tab}gl_FragColor = texture2D(map, vUv);
     this.pub.vertexShader.text = this.pub.vertexShader.draft;
   }
 
-  server_editFragmentShader(client: any, operationData: OperationData, revisionIndex: number, callback: (err: string, operationData?: any, revisionIndex?: number) => any) {
+  server_editFragmentShader(client: SupCore.RemoteClient, operationData: OperationData, revisionIndex: number, callback: EditShaderCallback) {
     if (operationData.userId !== client.id) { callback("Invalid client id"); return; }
 
     let operation = new OT.TextOperation();
@@ -420,19 +450,19 @@ ${tab}gl_FragColor = texture2D(map, vUv);
     this.pub.fragmentShader.draft = this.fragmentDocument.text;
     this.pub.fragmentShader.revisionId++;
 
-    callback(null, operation.serialize(), this.fragmentDocument.getRevisionId() - 1);
+    callback(null, null, operation.serialize(), this.fragmentDocument.getRevisionId() - 1);
     this.emit("change");
   }
 
   client_editFragmentShader(operationData: OperationData, revisionIndex: number) {
-    let operation = new OT.TextOperation();
+    const operation = new OT.TextOperation();
     operation.deserialize(operationData);
     this.fragmentDocument.apply(operation, revisionIndex);
     this.pub.fragmentShader.draft = this.fragmentDocument.text;
     this.pub.fragmentShader.revisionId++;
   }
 
-  server_saveFragmentShader(client: any, callback: (err: string) => any) {
+  server_saveFragmentShader(client: SupCore.RemoteClient, callback: SaveShaderCallback) {
     this.pub.fragmentShader.text = this.pub.fragmentShader.draft;
     callback(null);
     this.emit("change");

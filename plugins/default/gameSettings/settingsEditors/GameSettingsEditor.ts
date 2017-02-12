@@ -14,24 +14,24 @@ export default class GameSettingsEditor {
 
   fields: { [name: string]: HTMLInputElement } = {};
   sceneAssetId: string;
-  startupSceneButton: HTMLButtonElement;
+  sceneFieldSubscriber: SupClient.table.AssetFieldSubscriber;
 
   constructor(container: HTMLDivElement, projectClient: SupClient.ProjectClient) {
     this.projectClient = projectClient;
 
-    let { tbody } = SupClient.table.createTable(container);
+    const { tbody } = SupClient.table.createTable(container);
 
     this.startupSceneRow = SupClient.table.appendRow(tbody, SupClient.i18n.t("settingsEditors:Game.startupScene"));
-    let startupSceneFields = SupClient.table.appendAssetField(this.startupSceneRow.valueCell, "");
-    this.fields["startupSceneId"] = startupSceneFields.textField;
-    this.startupSceneButton = startupSceneFields.buttonElt;
-    this.startupSceneButton.disabled = true;
+    this.sceneFieldSubscriber = SupClient.table.appendAssetField(this.startupSceneRow.valueCell, this.sceneAssetId, "scene", projectClient);
+    this.sceneFieldSubscriber.on("select", (assetId: string) => {
+      this.projectClient.editResource("gameSettings", "setProperty", "startupSceneId", assetId);
+    });
 
     this.fpsRow = SupClient.table.appendRow(tbody, SupClient.i18n.t("settingsEditors:Game.framesPerSecond"));
     this.fields["framesPerSecond"] = SupClient.table.appendNumberField(this.fpsRow.valueCell, "", { min: 1 });
 
     this.ratioRow = SupClient.table.appendRow(tbody, SupClient.i18n.t("settingsEditors:Game.screenRatio"));
-    let ratioContainer = document.createElement("div");
+    const ratioContainer = document.createElement("div");
     ratioContainer.className = "";
     this.ratioRow.valueCell.appendChild(ratioContainer);
 
@@ -47,21 +47,10 @@ export default class GameSettingsEditor {
     this.fields["defaultLayer"].readOnly = true;
 
     for (let i = 0; i < GameSettingsResource.schema["customLayers"].maxLength; i++) {
-      let field = this.fields[`customLayer${i}`] = SupClient.table.appendTextField(this.layerContainers, "");
+      const field = this.fields[`customLayer${i}`] = SupClient.table.appendTextField(this.layerContainers, "");
       field.dataset["customLayerIndex"] = i.toString();
       field.addEventListener("change", this.onCustomLayerFieldChange);
     }
-
-    this.fields["startupSceneId"].addEventListener("input", (event: any) => {
-      if (event.target.value === "") this.projectClient.editResource("gameSettings", "setProperty", "startupSceneId", null);
-      else {
-        let entry = SupClient.findEntryByPath(this.projectClient.entries.pub, event.target.value);
-        if (entry != null && entry.type === "scene") this.projectClient.editResource("gameSettings", "setProperty", "startupSceneId", entry.id);
-      }
-    });
-    this.startupSceneButton.addEventListener("click", (event) => {
-      window.parent.postMessage({ type: "openEntry", id: this.sceneAssetId }, window.location.origin);
-    });
 
     this.fields["framesPerSecond"].addEventListener("change", (event: any) => {
       this.projectClient.editResource("gameSettings", "setProperty", "framesPerSecond", parseInt(event.target.value, 10));
@@ -75,40 +64,12 @@ export default class GameSettingsEditor {
       this.projectClient.editResource("gameSettings", "setProperty", "ratioDenominator", parseInt(event.target.value, 10));
     });
 
-    this.projectClient.subEntries(this);
     this.projectClient.subResource("gameSettings", this);
   }
 
   _setStartupScene(id: string) {
-    let entry = this.projectClient.entries.byId[id];
-    if (entry != null && entry.type === "scene") {
-      this.sceneAssetId = id;
-      this.fields["startupSceneId"].value = this.projectClient.entries.getPathFromId(id);
-      this.startupSceneButton.disabled = false;
-    } else {
-      this.sceneAssetId = null;
-      this.fields["startupSceneId"].value = "";
-      this.startupSceneButton.disabled = true;
-    }
-  }
-
-  onEntriesReceived = (entries: SupCore.Data.Entries) => {
-    if (this.resource == null) return;
-    this._setStartupScene(this.resource.pub.startupSceneId);
-  };
-
-  onEntryAdded() { /* Nothing to do here */ }
-  onEntryMoved(id: string, parentId: string, index: number) {
-    if (id !== this.resource.pub.startupSceneId) return;
-    this._setStartupScene(id);
-  }
-  onSetEntryProperty(id: string, key: string, value: any) {
-    if (id !== this.resource.pub.startupSceneId) return;
-    this._setStartupScene(id);
-  }
-  onEntryTrashed(id: string) {
-    if (id !== this.resource.pub.startupSceneId) return;
-    this._setStartupScene(id);
+    this.sceneAssetId = id;
+    this.sceneFieldSubscriber.onChangeAssetId(id);
   }
 
   onResourceReceived = (resourceId: string, resource: GameSettingsResource) => {
@@ -116,19 +77,18 @@ export default class GameSettingsEditor {
 
     this._setupCustomLayers();
 
-    for (let setting in resource.pub) {
+    for (const setting in resource.pub) {
       if (setting === "formatVersion" || setting === "customLayers") continue;
 
-      if (setting === "startupSceneId") {
-        if (this.projectClient.entries != null) this._setStartupScene(resource.pub.startupSceneId);
-      } else this.fields[setting].value = resource.pub[setting];
+      if (setting === "startupSceneId") this._setStartupScene(resource.pub.startupSceneId);
+      else this.fields[setting].value = resource.pub[setting];
     }
   };
 
   _setupCustomLayers() {
     this.customLayers = this.resource.pub.customLayers.slice(0);
     for (let i = 0; i < GameSettingsResource.schema["customLayers"].maxLength; i++) {
-      let field = this.fields[`customLayer${i}`];
+      const field = this.fields[`customLayer${i}`];
       if (i === this.customLayers.length) {
         field.placeholder = SupClient.i18n.t("settingsEditors:Game.newLayer");
         field.value = "";
@@ -152,7 +112,7 @@ export default class GameSettingsEditor {
   };
 
   onCustomLayerFieldChange = (event: any) => {
-    let index = parseInt(event.target.dataset["customLayerIndex"], 10);
+    const index = parseInt(event.target.dataset["customLayerIndex"], 10);
     if (index > this.customLayers.length) return;
 
     if (index === this.customLayers.length) {
@@ -164,9 +124,7 @@ export default class GameSettingsEditor {
         if (index === this.customLayers.length - 1) {
           this.customLayers.pop();
         } else {
-          /* tslint:disable:no-unused-expression */
           new SupClient.Dialogs.InfoDialog("Layer name cannot be empty");
-          /* tslint:enable:no-unused-expression */
           event.target.value = this.customLayers[index];
           return;
         }

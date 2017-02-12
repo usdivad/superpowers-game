@@ -8,11 +8,5 @@ namespace Sup {
       if (player.gameInstance.audio.getContext() == null) return;
       player.gameInstance.audio.masterGain.gain.value = volume;
     }
-    /*
-    export function getAudioContext() {
-      if (player.gameInstance.audio.getContext() == null) return 0;
-      return player.gameInstance.audio.getContext();
-    }
-    */
   }
 }

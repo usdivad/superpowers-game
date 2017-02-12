@@ -1,10 +1,10 @@
-/// <reference path="../../../../typings/tsd.d.ts" />
 /// <reference path="../SupRuntime.d.ts" />
 /// <reference path="../../../../SupCore/SupCore.d.ts" />
+/// <reference path="../../../../SupClient/typings/SupApp.d.ts" />
 
 import * as async from "async";
 import * as querystring from "querystring";
-import supFetch from "../../../../SupClient/src/fetch";
+import supFetch from "../../../../SupClient/fetch";
 import Player from "./Player";
 
 // Any export here will be exposed as SupRuntime.* by browserify
@@ -34,18 +34,39 @@ export function registerResource(name: string, plugin: SupRuntime.RuntimeResourc
 
 SupCore.system = new SupCore.System("", "");
 
-// In app, open links in a browser window
-let playerWindow: GitHubElectron.BrowserWindow;
-if (window.navigator.userAgent.indexOf("Electron") !== -1) {
-  const nodeRequire = require;
-  const electron = nodeRequire("electron");
-  playerWindow = electron.remote.getCurrentWindow();
+// Setup SupApp
+if ((global as any).SupApp == null) {
+  (global as any).SupApp = null;
+  try {
+    (global as any).SupApp = ((top as any).SupApp != null) ? (top as any).SupApp : null;
+  } catch (err) {
+    /* Ignore */
+  }
+}
 
+// In app, open links in a browser window
+let playerWindow: Electron.BrowserWindow;
+let electron: any;
+
+if (SupApp != null) {
+  playerWindow = SupApp.getCurrentWindow();
+} else {
+  const nodeRequire = require;
+  try { electron = nodeRequire("electron"); } catch (e) { /* Ignore */ }
+  if (electron != null) playerWindow = electron.remote.getCurrentWindow();
+}
+
+if (playerWindow != null) {
   document.body.addEventListener("click", (event) => {
     if ((event.target as HTMLElement).tagName !== "A") return;
     event.preventDefault();
-    electron.shell.openExternal((event.target as HTMLAnchorElement).href);
+
+    const url = (event.target as HTMLAnchorElement).href;
+    if (SupApp != null) SupApp.openLink(url);
+    else electron.shell.openExternal(url);
   });
+
+  if (SupApp != null) SupApp.onMessage("force-quit", () => { playerWindow.close(); });
 }
 const qs = querystring.parse(window.location.search.slice(1));
 
@@ -62,6 +83,9 @@ const canvas = <HTMLCanvasElement>document.querySelector("canvas");
 // Prevent keypress events from leaking out to a parent window
 // They might trigger scrolling for instance
 canvas.addEventListener("keypress", (event) => { event.preventDefault(); });
+
+// Make sure the focus is always on the game canvas wherever we click on the game window
+document.addEventListener("click", () => canvas.focus() );
 
 if (qs.debug != null && playerWindow != null) playerWindow.webContents.openDevTools();
 
@@ -99,6 +123,8 @@ const onLoaded = (err: Error) => {
 };
 
 // Load plugins
+const pluginBundleNames = [ "components", "runtime", "typescriptAPI" ];
+
 supFetch("plugins.json", "json", (err: Error, pluginsInfo: SupCore.PluginsInfo) => {
   if (err != null) {
     console.log(err);
@@ -106,14 +132,14 @@ supFetch("plugins.json", "json", (err: Error, pluginsInfo: SupCore.PluginsInfo) 
     return;
   }
 
-  async.each(pluginsInfo.list, (pluginName, pluginCallback) => {
-    async.each(pluginsInfo.publishedBundles, (bundle, cb) => {
+  async.each(pluginsInfo.list, (pluginName, cb) => {
+    async.each(pluginBundleNames, (bundle, cb) => {
       const script = document.createElement("script");
       script.src = `plugins/${pluginName}/bundles/${bundle}.js`;
       script.addEventListener("load", () => cb(null));
       script.addEventListener("error", (err) => cb(null));
       document.body.appendChild(script);
-    }, pluginCallback);
+    }, cb);
   }, (err) => {
     if (err != null) console.log(err);
     // Load game

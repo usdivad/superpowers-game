@@ -113,7 +113,6 @@ declare module p2 {
 
         constructor(bodyA: Body, bodyB: Body, type: number, options?: {
             collideConnected?: boolean;
-            wakeUpBodies?: boolean;
         });
 
         type: number;
@@ -130,9 +129,7 @@ declare module p2 {
 
     export class DistanceConstraint extends Constraint {
 
-        constructor(bodyA: Body, bodyB: Body, type: number, options?: {
-            collideConnected?: boolean;
-            wakeUpBodies?: boolean;
+        constructor(bodyA: Body, bodyB: Body, options?: {
             distance?: number;
             localAnchorA?: number[];
             localAnchorB?: number[];
@@ -156,9 +153,7 @@ declare module p2 {
 
     export class GearConstraint extends Constraint {
 
-        constructor(bodyA: Body, bodyB: Body, type: number, options?: {
-            collideConnected?: boolean;
-            wakeUpBodies?: boolean;
+        constructor(bodyA: Body, bodyB: Body, options?: {
             angle?: number;
             ratio?: number;
             maxTorque?: number;
@@ -174,9 +169,7 @@ declare module p2 {
 
     export class LockConstraint extends Constraint {
 
-        constructor(bodyA: Body, bodyB: Body, type: number, options?: {
-            collideConnected?: boolean;
-            wakeUpBodies?: boolean;
+        constructor(bodyA: Body, bodyB: Body, options?: {
             localOffsetB?: number[];
             localAngleB?: number;
             maxForce?: number;
@@ -189,9 +182,7 @@ declare module p2 {
 
     export class PrismaticConstraint extends Constraint {
 
-        constructor(bodyA: Body, bodyB: Body, type: number, options?: {
-            collideConnected?: boolean;
-            wakeUpBodies?: boolean;
+        constructor(bodyA: Body, bodyB: Body, options?: {
             maxForce?: number;
             localAnchorA?: number[];
             localAnchorB?: number[];
@@ -224,9 +215,7 @@ declare module p2 {
 
     export class RevoluteConstraint extends Constraint {
 
-        constructor(bodyA: Body, bodyB: Body, type: number, options?: {
-            collideConnected?: boolean;
-            wakeUpBodies?: boolean;
+        constructor(bodyA: Body, bodyB: Body, options?: {
             worldPivot?: number[];
             localPivotA?: number[];
             localPivotB?: number[];
@@ -251,6 +240,25 @@ declare module p2 {
         setLimits(lower: number, upper: number): void;
         setMotorSpeed(speed: number): void;
         getMotorSpeed(): number;
+
+    }
+
+    export class WheelConstraint extends Constraint {
+        constructor(vehicle: TopDownVehicle, options?: {
+            localForwardVector?: number[],
+            localPosition?: number[],
+            sideFriction?: number
+        });
+        setBrakeForce(number): void;
+        setSideFriction(number): void;
+        getSpeed(): number;
+        update(): void;
+
+        vehicle: TopDownVehicle;
+        steerValue: number;
+        engineForce: number;
+        localForwardVector: number[];
+        localPosition: number[];
 
     }
 
@@ -491,7 +499,10 @@ declare module p2 {
         invInertia: number;
         invMassSolve: number;
         invInertiaSolve: number;
-        fixedRotation: number;
+        fixedRotation: boolean;
+        fixedX: boolean;
+        fixedY: boolean;
+        massMultiplier: number[];
         position: number[];
         interpolatedPosition: number[];
         interpolatedAngle: number;
@@ -517,6 +528,10 @@ declare module p2 {
         sleepTimeLimit: number;
         gravityScale: number;
         collisionResponse: boolean;
+        idleTime: number;
+        timeLastSleepy: number;
+        ccdSpeedThreshold: number;
+        ccdIterations: number;
 
         updateSolveMassProperties(): void;
         setDensity(density: number): void;
@@ -528,8 +543,13 @@ declare module p2 {
         removeShape(shape: Shape): boolean;
         updateMassProperties(): void;
         applyForce(force: number[], worldPoint: number[]): void;
+        applyForceLocal(localForce: number[], localPoint: number[]): void;
+        applyImpulse(impulseVector: number[], relativePoint: number[]): void;
+        applyImpulseLocal(localImpulse: number[], localPoint: number[]): void;
         toLocalFrame(out: number[], worldPoint: number[]): void;
         toWorldFrame(out: number[], localPoint: number[]): void;
+        vectorToLocalFrame(out: number[], worldVector: number[]): void;
+        vectorToWorldFrame(out: number[], localVector: number[]): void;
         fromPolygon(path: number[][], options?: {
             optimalDecomp?: boolean;
             skipSimpleCheck?: boolean;
@@ -538,14 +558,15 @@ declare module p2 {
         adjustCenterOfMass(): void;
         setZeroForce(): void;
         resetConstraintVelocity(): void;
+        addConstraintVelocity(): void;
         applyDamping(dy: number): void;
         wakeUp(): void;
         sleep(): void;
         sleepTick(time: number, dontSleep: boolean, dt: number): void;
-        getVelocityFromPosition(story: number[], dt: number): number[];
-        getAngularVelocityFromPosition(timeStep: number): number;
         overlaps(body: Body): boolean;
-
+        integrate(dt: number): void;
+        integrateToTimeOfImpact(dt: number): void;
+        getVelocityAtPoint(result: number[], relativePoint: number[]): number[];
     }
 
     export class Spring {
@@ -593,6 +614,22 @@ declare module p2 {
         });
 
         restAngle: number;
+
+    }
+
+    export class TopDownVehicle {
+        constructor(chassiBody: Body, options?: {});
+        addToWorld(world: World): void;
+        removeFromWorld(): void;
+        addWheel(wheelOptions?: {
+            localForwardVector?: number[],
+            localPosition?: number[],
+            sideFriction?: number
+        }): WheelConstraint;
+        update(): void;
+
+        chassisBody: Body;
+        wheels: WheelConstraint[];
 
     }
 

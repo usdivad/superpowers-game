@@ -1,8 +1,11 @@
-let THREE = SupEngine.THREE;
+const THREE = SupEngine.THREE;
+import * as fs from "fs";
+
 import TileMap from "./TileMap";
 import TileSet from "./TileSet";
 import TileLayerGeometry from "./TileLayerGeometry";
 import TileMapRendererUpdater from "./TileMapRendererUpdater";
+import { ShaderAssetPub } from "../../shader/data/ShaderAsset";
 
 export default class TileMapRenderer extends SupEngine.ActorComponent {
   /* tslint:disable:variable-name */
@@ -15,7 +18,7 @@ export default class TileMapRenderer extends SupEngine.ActorComponent {
   castShadow = false;
   receiveShadow = false;
   materialType = "basic";
-  customShader: any;
+  customShader: ShaderAssetPub;
 
   layerMeshes: THREE.Mesh[];
   layerMeshesById: { [id: string]: THREE.Mesh };
@@ -28,7 +31,7 @@ export default class TileMapRenderer extends SupEngine.ActorComponent {
     super(actor, "TileMapRenderer");
   }
 
-  setTileMap(asset: TileMap, materialType?: string, customShader?: any) {
+  setTileMap(asset: TileMap, materialType?: string, customShader?: ShaderAssetPub) {
     if (this.layerMeshes != null) this._clearLayerMeshes();
 
     this.tileMap = asset;
@@ -56,7 +59,7 @@ export default class TileMapRenderer extends SupEngine.ActorComponent {
     this.layerVisibleById = {};
 
     for (let layerIndex = 0; layerIndex < this.tileMap.getLayersCount(); layerIndex++) {
-      let layerId = this.tileMap.getLayerId(layerIndex);
+      const layerId = this.tileMap.getLayerId(layerIndex);
       this.addLayer(layerId, layerIndex);
     }
     this.setCastShadow(this.castShadow);
@@ -65,7 +68,7 @@ export default class TileMapRenderer extends SupEngine.ActorComponent {
   }
 
   _clearLayerMeshes() {
-    for (let layerMesh of this.layerMeshes) {
+    for (const layerMesh of this.layerMeshes) {
       layerMesh.geometry.dispose();
       layerMesh.material.dispose();
       this.actor.threeObject.remove(layerMesh);
@@ -86,32 +89,60 @@ export default class TileMapRenderer extends SupEngine.ActorComponent {
   }
 
   addLayer(layerId: string, layerIndex: number) {
-    let width = this.tileMap.getWidth() * this.tileSet.data.grid.width;
-    let height = this.tileMap.getHeight() * this.tileSet.data.grid.height;
-    let geometry = new TileLayerGeometry(width, height, this.tileMap.getWidth(), this.tileMap.getHeight());
+    const width = this.tileMap.getWidth() * this.tileSet.data.grid.width;
+    const height = this.tileMap.getHeight() * this.tileSet.data.grid.height;
+    const geometry = new TileLayerGeometry(width, height, this.tileMap.getWidth(), this.tileMap.getHeight());
 
-    let material: THREE.MeshBasicMaterial|THREE.MeshPhongMaterial;
-    if (this.materialType === "shader") {
-      material = SupEngine.componentClasses["Shader"].createShaderMaterial(
-        this.customShader,
-        { map: this.tileSet.data.texture },
-        geometry
-      );
-      (<any>material).map = this.tileSet.data.texture;
+    let shaderData: ShaderAssetPub;
+    let defaultUniforms: THREE.IUniform;
 
-    } else {
-      if (this.materialType === "basic") material = new THREE.MeshBasicMaterial();
-      else if (this.materialType === "phong") material = new THREE.MeshPhongMaterial();
-      material.map = this.tileSet.data.texture;
-      material.alphaTest = 0.1;
-      material.side = THREE.DoubleSide;
-      material.transparent = true;
+    switch (this.materialType) {
+      case "basic":
+        shaderData = {
+          formatVersion: null,
+          vertexShader: { text: THREE.ShaderLib.basic.vertexShader, draft: null, revisionId: null },
+          fragmentShader: { text: fs.readFileSync(`${__dirname}/TileMapBasicFragmentShader.glsl`, { encoding: "utf8" }), draft: null, revisionId: null },
+          uniforms: [ { id: null, name: "map", type: "t", value: "map" }],
+          attributes: [],
+          useLightUniforms: false
+        };
+
+        defaultUniforms = THREE.ShaderLib.basic.uniforms;
+        break;
+
+      case "phong":
+        shaderData = {
+          formatVersion: null,
+          vertexShader: { text: THREE.ShaderLib.phong.vertexShader, draft: null, revisionId: null },
+          fragmentShader: { text: fs.readFileSync(`${__dirname}/TileMapPhongFragmentShader.glsl`, { encoding: "utf8" }), draft: null, revisionId: null },
+          uniforms: [ { id: null, name: "map", type: "t", value: "map" }],
+          attributes: [],
+          useLightUniforms: true
+        };
+
+        defaultUniforms = THREE.ShaderLib.phong.uniforms;
+        break;
+
+      case "shader":
+        shaderData = this.customShader;
+        break;
     }
 
-    let layerMesh = new THREE.Mesh(geometry, material);
+    const material = SupEngine.componentClasses["Shader"].createShaderMaterial(
+      shaderData,
+      { map: this.tileSet.data.texture },
+      geometry,
+      { defaultUniforms }
+    ) as THREE.ShaderMaterial;
+    (material as any).map = this.tileSet.data.texture;
+    material.alphaTest = 0.1;
+    material.side = THREE.DoubleSide;
+    material.transparent = true;
+
+    const layerMesh = new THREE.Mesh(geometry, material);
     layerMesh.receiveShadow = this.receiveShadow;
 
-    let scaleRatio = 1 / this.tileMap.getPixelsPerUnit();
+    const scaleRatio = 1 / this.tileMap.getPixelsPerUnit();
     layerMesh.scale.set(scaleRatio, scaleRatio, 1);
     layerMesh.updateMatrixWorld(false);
 
@@ -137,8 +168,8 @@ export default class TileMapRenderer extends SupEngine.ActorComponent {
   }
 
   moveLayer(layerId: string, newIndex: number) {
-    let layer = this.layerMeshesById[layerId];
-    let oldIndex = this.layerMeshes.indexOf(layer);
+    const layer = this.layerMeshesById[layerId];
+    const oldIndex = this.layerMeshes.indexOf(layer);
     this.layerMeshes.splice(oldIndex, 1);
 
     if (oldIndex < newIndex) newIndex--;
@@ -149,26 +180,26 @@ export default class TileMapRenderer extends SupEngine.ActorComponent {
 
   setCastShadow(castShadow: boolean) {
     this.castShadow = castShadow;
-    for (let layerMesh of this.layerMeshes) layerMesh.castShadow = castShadow;
+    for (const layerMesh of this.layerMeshes) layerMesh.castShadow = castShadow;
     if (!castShadow) return;
 
     this.actor.gameInstance.threeScene.traverse((object: any) => {
-      let material: THREE.Material = object.material;
+      const material: THREE.Material = object.material;
       if (material != null) material.needsUpdate = true;
     });
   }
 
   setReceiveShadow(receiveShadow: boolean) {
     this.receiveShadow = receiveShadow;
-    for (let layerMesh of this.layerMeshes) {
+    for (const layerMesh of this.layerMeshes) {
       layerMesh.receiveShadow = receiveShadow;
       layerMesh.material.needsUpdate = true;
     }
   }
 
   refreshPixelsPerUnit(pixelsPerUnit: number) {
-    let scaleRatio = 1 / this.tileMap.getPixelsPerUnit();
-    for (let layerMesh of this.layerMeshes) {
+    const scaleRatio = 1 / this.tileMap.getPixelsPerUnit();
+    for (const layerMesh of this.layerMeshes) {
       layerMesh.scale.set(scaleRatio, scaleRatio, 1);
       layerMesh.updateMatrixWorld(false);
     }
@@ -176,7 +207,7 @@ export default class TileMapRenderer extends SupEngine.ActorComponent {
 
   refreshLayersDepth() {
     for (let layerMeshIndex = 0; layerMeshIndex < this.layerMeshes.length; layerMeshIndex++) {
-      let layerMesh = this.layerMeshes[layerMeshIndex];
+      const layerMesh = this.layerMeshes[layerMeshIndex];
       layerMesh.position.setZ(layerMeshIndex * this.tileMap.getLayersDepthOffset());
       layerMesh.updateMatrixWorld(false);
     }
@@ -201,22 +232,27 @@ export default class TileMapRenderer extends SupEngine.ActorComponent {
     let flipX = false; let flipY = false;
     let angle = 0;
 
-    let tileInfo = <(number|boolean)[]>this.tileMap.getTileAt(layerIndex, x, y);
-    if ((<any>tileInfo) !== 0) {
-      tileX = <number>tileInfo[0];
-      tileY = <number>tileInfo[1];
-      flipX = <boolean>tileInfo[2];
-      flipY = <boolean>tileInfo[3];
-      angle = <number>tileInfo[4];
+    const tileInfo = this.tileMap.getTileAt(layerIndex, x, y) as (number|boolean)[];
+    if ((tileInfo as any) !== 0) {
+      tileX = tileInfo[0] as number;
+      tileY = tileInfo[1] as number;
+      flipX = tileInfo[2] as boolean;
+      flipY = tileInfo[3] as boolean;
+      angle = tileInfo[4] as number;
     }
 
-    if (tileX === -1 || tileY === -1 || tileX >= this.tilesPerRow || tileY >= this.tilesPerColumn ||
-    (tileX === this.tilesPerRow - 1 && tileY === this.tilesPerColumn - 1)) {
-      tileX = this.tilesPerRow - 1;
-      tileY = this.tilesPerColumn - 1;
+    const quadIndex = (x + y * this.tileMap.getWidth());
+    const layerMesh = this.layerMeshes[layerIndex];
+    const uvs = (layerMesh.geometry as THREE.BufferGeometry).getAttribute("uv") as THREE.BufferAttribute;
+    uvs.needsUpdate = true;
+    const uvsArray = uvs.array as number[];
+
+    if (tileX === -1 || tileY === -1 || tileX >= this.tilesPerRow || tileY >= this.tilesPerColumn) {
+      for (let i = 0; i < 8; i++) uvsArray[quadIndex * 8 + i] = -1;
+      return;
     }
 
-    let image = this.tileSet.data.texture.image;
+    const image = this.tileSet.data.texture.image;
     let left   = (tileX           * this.tileSet.data.grid.width + 0.2) / image.width;
     let right  = ((tileX + 1)     * this.tileSet.data.grid.width - 0.2) / image.width;
     let bottom = 1 - ((tileY + 1) * this.tileSet.data.grid.height - 0.2) / image.height;
@@ -225,66 +261,61 @@ export default class TileMapRenderer extends SupEngine.ActorComponent {
     if (flipX) [right, left] = [left, right];
     if (flipY) [top, bottom] = [bottom, top];
 
-    let quadIndex = (x + y * this.tileMap.getWidth());
-    let layerMesh = this.layerMeshes[layerIndex];
-    let uvs = (<any>layerMesh.geometry).getAttribute("uv");
-    uvs.needsUpdate = true;
-
     switch (angle) {
       case 0:
-        uvs.array[quadIndex * 8 + 0] = left;
-        uvs.array[quadIndex * 8 + 1] = bottom;
+        uvsArray[quadIndex * 8 + 0] = left;
+        uvsArray[quadIndex * 8 + 1] = bottom;
 
-        uvs.array[quadIndex * 8 + 2] = right;
-        uvs.array[quadIndex * 8 + 3] = bottom;
+        uvsArray[quadIndex * 8 + 2] = right;
+        uvsArray[quadIndex * 8 + 3] = bottom;
 
-        uvs.array[quadIndex * 8 + 4] = right;
-        uvs.array[quadIndex * 8 + 5] = top;
+        uvsArray[quadIndex * 8 + 4] = right;
+        uvsArray[quadIndex * 8 + 5] = top;
 
-        uvs.array[quadIndex * 8 + 6] = left;
-        uvs.array[quadIndex * 8 + 7] = top;
+        uvsArray[quadIndex * 8 + 6] = left;
+        uvsArray[quadIndex * 8 + 7] = top;
         break;
 
       case 90:
-        uvs.array[quadIndex * 8 + 0] = left;
-        uvs.array[quadIndex * 8 + 1] = top;
+        uvsArray[quadIndex * 8 + 0] = left;
+        uvsArray[quadIndex * 8 + 1] = top;
 
-        uvs.array[quadIndex * 8 + 2] = left;
-        uvs.array[quadIndex * 8 + 3] = bottom;
+        uvsArray[quadIndex * 8 + 2] = left;
+        uvsArray[quadIndex * 8 + 3] = bottom;
 
-        uvs.array[quadIndex * 8 + 4] = right;
-        uvs.array[quadIndex * 8 + 5] = bottom;
+        uvsArray[quadIndex * 8 + 4] = right;
+        uvsArray[quadIndex * 8 + 5] = bottom;
 
-        uvs.array[quadIndex * 8 + 6] = right;
-        uvs.array[quadIndex * 8 + 7] = top;
+        uvsArray[quadIndex * 8 + 6] = right;
+        uvsArray[quadIndex * 8 + 7] = top;
         break;
 
       case 180:
-        uvs.array[quadIndex * 8 + 0] = right;
-        uvs.array[quadIndex * 8 + 1] = top;
+        uvsArray[quadIndex * 8 + 0] = right;
+        uvsArray[quadIndex * 8 + 1] = top;
 
-        uvs.array[quadIndex * 8 + 2] = left;
-        uvs.array[quadIndex * 8 + 3] = top;
+        uvsArray[quadIndex * 8 + 2] = left;
+        uvsArray[quadIndex * 8 + 3] = top;
 
-        uvs.array[quadIndex * 8 + 4] = left;
-        uvs.array[quadIndex * 8 + 5] = bottom;
+        uvsArray[quadIndex * 8 + 4] = left;
+        uvsArray[quadIndex * 8 + 5] = bottom;
 
-        uvs.array[quadIndex * 8 + 6] = right;
-        uvs.array[quadIndex * 8 + 7] = bottom;
+        uvsArray[quadIndex * 8 + 6] = right;
+        uvsArray[quadIndex * 8 + 7] = bottom;
         break;
 
       case 270:
-        uvs.array[quadIndex * 8 + 0] = right;
-        uvs.array[quadIndex * 8 + 1] = bottom;
+        uvsArray[quadIndex * 8 + 0] = right;
+        uvsArray[quadIndex * 8 + 1] = bottom;
 
-        uvs.array[quadIndex * 8 + 2] = right;
-        uvs.array[quadIndex * 8 + 3] = top;
+        uvsArray[quadIndex * 8 + 2] = right;
+        uvsArray[quadIndex * 8 + 3] = top;
 
-        uvs.array[quadIndex * 8 + 4] = left;
-        uvs.array[quadIndex * 8 + 5] = top;
+        uvsArray[quadIndex * 8 + 4] = left;
+        uvsArray[quadIndex * 8 + 5] = top;
 
-        uvs.array[quadIndex * 8 + 6] = left;
-        uvs.array[quadIndex * 8 + 7] = bottom;
+        uvsArray[quadIndex * 8 + 6] = left;
+        uvsArray[quadIndex * 8 + 7] = bottom;
         break;
     }
   }
@@ -292,7 +323,7 @@ export default class TileMapRenderer extends SupEngine.ActorComponent {
   setIsLayerActive(active: boolean) {
     if (this.layerMeshes == null) return;
 
-    for (let layerId in this.layerMeshesById)
+    for (const layerId in this.layerMeshesById)
       this.layerMeshesById[layerId].visible = active && this.layerVisibleById[layerId];
   }
 }

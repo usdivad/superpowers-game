@@ -4,7 +4,7 @@ declare let FontFace: any;
 export function loadAsset(player: SupRuntime.Player, entry: any, callback: (err: Error, asset?: any) => any) {
   player.getAssetData(`assets/${entry.storagePath}/asset.json`, "json", (err, data) => {
     if (data.isBitmap) {
-      let img = new Image();
+      const img = new Image();
 
       img.onload = () => {
         data.texture = new SupEngine.THREE.Texture(img);
@@ -38,9 +38,9 @@ export function loadAsset(player: SupRuntime.Player, entry: any, callback: (err:
 }
 
 function fixedEncodeURIComponent(str: string) {
-  return encodeURIComponent(str).replace(/[!'()*]/g, function(c) {
-    return `%${c.charCodeAt(0).toString(16)}`;
-  });
+  return str.split("/").map((part) =>
+    encodeURIComponent(part).replace(/[!'()*]/g, (c) => `%${c.charCodeAt(0).toString(16)}`)
+  ).join("/");
 }
 
 export function createOuterAsset(player: SupRuntime.Player, asset: any) { return new (<any>window).Sup.Font(asset); }

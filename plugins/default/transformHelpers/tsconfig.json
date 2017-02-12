@@ -2,6 +2,15 @@
   "compilerOptions": {
     "module": "commonjs",
     "target": "es5",
-    "noImplicitAny": true
-  }
+    "noImplicitAny": true,
+    "rootDir": "./",
+    "typeRoots": [
+      "../../../../../node_modules/@types",
+      "../../../SupEngine/node_modules/@types"
+    ]
+  },
+  "exclude": [
+    "node_modules",
+    "typings"
+  ]
 }

@@ -1,11 +1,19 @@
 export interface ModelRendererConfigPub {
-  formatVersion: number;
+  formatVersion?: number;
 
-  modelAssetId: string; animationId: string;
-  castShadow: boolean; receiveShadow: boolean;
-  color: string;
-  overrideOpacity: boolean; opacity: number;
-  materialType: string; shaderAssetId: string;
+  modelAssetId: string;
+  animationId?: string;
+
+  castShadow?: boolean;
+  receiveShadow?: boolean;
+
+  color?: string;
+
+  overrideOpacity?: boolean;
+  opacity?: number;
+
+  materialType: string;
+  shaderAssetId?: string;
 }
 
 export default class ModelRendererConfig extends SupCore.Data.Base.ComponentConfig {
@@ -25,7 +33,7 @@ export default class ModelRendererConfig extends SupCore.Data.Base.ComponentConf
   };
 
   static create() {
-    let emptyConfig: ModelRendererConfigPub = {
+    const emptyConfig: ModelRendererConfigPub = {
       formatVersion: ModelRendererConfig.currentFormatVersion,
 
       modelAssetId: null,
@@ -58,8 +66,8 @@ export default class ModelRendererConfig extends SupCore.Data.Base.ComponentConf
       if (pub.materialType == null) pub.materialType = "basic";
 
       // NOTE: Legacy stuff from Superpowers 0.4
-      if (typeof pub.modelAssetId === "number") pub.modelAssetId = pub.modelAssetId.toString();
-      if (typeof pub.animationId === "number") pub.animationId = pub.animationId.toString();
+      if (typeof pub.modelAssetId === "number") pub.modelAssetId = (pub.modelAssetId as number).toString();
+      if (typeof pub.animationId === "number") pub.animationId = (pub.animationId as number).toString();
     }
 
     return true;

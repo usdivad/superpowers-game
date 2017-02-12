@@ -1,4 +1,4 @@
-let THREE = SupEngine.THREE;
+const THREE = SupEngine.THREE;
 
 import { SpriteAssetPub } from "../data/SpriteAsset";
 import { SpriteAnimationPub } from "../data/SpriteAnimations";
@@ -98,7 +98,7 @@ export default class SpriteRenderer extends SupEngine.ActorComponent {
     if (this.material == null) return;
 
     if (this.material instanceof THREE.ShaderMaterial) {
-      let uniforms = (<THREE.ShaderMaterial>this.material).uniforms;
+      const uniforms = (<THREE.ShaderMaterial>this.material).uniforms;
       if (uniforms.color != null) uniforms.color.value.setRGB(r, g, b);
     } else (<THREE.MeshBasicMaterial>this.material).color.setRGB(r, g, b);
     this.material.needsUpdate = true;
@@ -107,7 +107,7 @@ export default class SpriteRenderer extends SupEngine.ActorComponent {
   updateShape() {
     if (this.threeMesh == null) return;
 
-    let scaleRatio = 1 / this.asset.pixelsPerUnit;
+    const scaleRatio = 1 / this.asset.pixelsPerUnit;
     this.threeMesh.scale.set(scaleRatio, scaleRatio, scaleRatio);
     let x: number;
     if (this.horizontalFlip) x = this.asset.origin.x - 0.5;
@@ -154,7 +154,7 @@ export default class SpriteRenderer extends SupEngine.ActorComponent {
 
   updateAnimationsByName() {
     this.animationsByName = {};
-    for(let animation of this.asset.animations) {
+    for(const animation of this.asset.animations) {
       this.animationsByName[animation.name] = animation;
     }
   }
@@ -174,7 +174,7 @@ export default class SpriteRenderer extends SupEngine.ActorComponent {
     if (!castShadow) return;
 
     this.actor.gameInstance.threeScene.traverse((object: any) => {
-      let material: THREE.Material = object.material;
+      const material: THREE.Material = object.material;
       if (material != null) material.needsUpdate = true;
     });
   }
@@ -186,15 +186,15 @@ export default class SpriteRenderer extends SupEngine.ActorComponent {
   }
 
   setFrame(frame: number) {
-    let map: THREE.Texture = (<any>this.material).map;
+    const map: THREE.Texture = (<any>this.material).map;
 
     let frameX: number, frameY: number;
     if (this.asset.frameOrder === "rows") {
-      let framesPerRow = Math.floor((<any>map).size.width / this.asset.grid.width);
+      const framesPerRow = Math.floor((<any>map).size.width / this.asset.grid.width);
       frameX = frame % framesPerRow;
       frameY = Math.floor(frame / framesPerRow);
     } else {
-      let framesPerColumn = Math.floor((<any>map).size.height / this.asset.grid.height);
+      const framesPerColumn = Math.floor((<any>map).size.height / this.asset.grid.height);
       frameX = Math.floor(frame / framesPerColumn);
       frameY = frame % framesPerColumn;
     }
@@ -207,22 +207,23 @@ export default class SpriteRenderer extends SupEngine.ActorComponent {
     if (this.horizontalFlip) [ left, right ] = [ right, left ];
     if (this.verticalFlip) [ top, bottom ] = [ bottom, top ];
 
-    let uvs = <THREE.BufferAttribute>this.geometry.getAttribute("uv");
+    const uvs = <THREE.BufferAttribute>this.geometry.getAttribute("uv");
     uvs.needsUpdate = true;
 
-    uvs.array[0] = left ; uvs.array[1] = top;
-    uvs.array[2] = right; uvs.array[3] = top;
-    uvs.array[4] = left ; uvs.array[5] = bottom;
-    uvs.array[6] = right; uvs.array[7] = bottom;
+    const uvsArray = uvs.array as number[];
+    uvsArray[0] = left ; uvsArray[1] = top;
+    uvsArray[2] = right; uvsArray[3] = top;
+    uvsArray[4] = left ; uvsArray[5] = bottom;
+    uvsArray[6] = right; uvsArray[7] = bottom;
   }
 
   setAnimation(newAnimationName: string, newAnimationLooping = true) {
     if (newAnimationName != null) {
-      let animation = this.animationsByName[newAnimationName];
+      const animation = this.animationsByName[newAnimationName];
       if (animation == null) throw new Error(`Animation ${newAnimationName} doesn't exist`);
 
       this.animationLooping = newAnimationLooping;
-      if (newAnimationName === this.animationName && this.isAnimationPlaying ) return;
+      if (newAnimationName === this.animationName && this.isAnimationPlaying) return;
 
       this.animation = animation;
       this.animationName = newAnimationName;
@@ -320,7 +321,7 @@ export default class SpriteRenderer extends SupEngine.ActorComponent {
 
   update() {
     if (this.material != null) {
-      let uniforms = (<THREE.ShaderMaterial>this.material).uniforms;
+      const uniforms = (<THREE.ShaderMaterial>this.material).uniforms;
       if (uniforms != null) uniforms.time.value += 1 / this.actor.gameInstance.framesPerSecond;
     }
 

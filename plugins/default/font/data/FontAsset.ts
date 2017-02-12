@@ -8,15 +8,32 @@ declare let FontFace: any;
 let THREE: typeof SupEngine.THREE;
 if ((<any>global).window != null && (<any>global).window.SupEngine != null) THREE = (<any>global).window.SupEngine.THREE;
 
+type UploadCallback = SupCore.Data.Base.ErrorCallback & ((err: string, ack: any, font: any) => void);
+
 export interface FontPub {
   formatVersion: number;
-  isBitmap: boolean; filtering: string; pixelsPerUnit: number;
-  font: Buffer; size: number; color: string; name?: string;
-  bitmap: Buffer; gridWidth: number; gridHeight: number; charset: string; charsetOffset: number; texture?: THREE.Texture;
+
+  isBitmap: boolean;
+  filtering: string;
+  pixelsPerUnit: number;
+
+  font: Buffer;
+  size: number;
+  color: string;
+  opacity: number;
+
+  bitmap: Buffer;
+  gridWidth: number;
+  gridHeight: number;
+  charset: string;
+  charsetOffset: number;
+
+  name?: string;
+  texture?: THREE.Texture;
 }
 
 export default class FontAsset extends SupCore.Data.Base.Asset {
-  static currentFormatVersion = 1;
+  static currentFormatVersion = 2;
 
   static schema: SupCore.Data.Schema = {
     formatVersion: { type: "integer" },
@@ -28,6 +45,7 @@ export default class FontAsset extends SupCore.Data.Base.Asset {
     font: { type: "buffer" },
     size: { type: "number", min: 1, mutable: true },
     color: { type: "string", length: 6, mutable: true },
+    opacity: { type: "number?", min: 0, max: 1, mutable: true },
 
     bitmap: { type: "buffer" },
     gridWidth: { type: "number", min: 1, mutable: true },
@@ -56,6 +74,7 @@ export default class FontAsset extends SupCore.Data.Base.Asset {
       font: new Buffer(0),
       size: 32,
       color: "ffffff",
+      opacity: null,
 
       bitmap: new Buffer(0),
       gridWidth: 16,
@@ -69,7 +88,7 @@ export default class FontAsset extends SupCore.Data.Base.Asset {
 
   load(assetPath: string) {
     fs.readFile(path.join(assetPath, "asset.json"), { encoding: "utf8" }, (err, json) => {
-      let pub = JSON.parse(json);
+      const pub = JSON.parse(json);
 
       fs.readFile(path.join(assetPath, "font.dat"), (err, buffer) => {
         pub.font = buffer;
@@ -85,42 +104,61 @@ export default class FontAsset extends SupCore.Data.Base.Asset {
     if (pub.formatVersion === FontAsset.currentFormatVersion) { callback(false); return; }
 
     if (pub.formatVersion == null) {
-      // NOTE: Legacy stuff from Superpowers 0.7
       if (pub.color == null || pub.color.length !== 6) pub.color = "ffffff";
-
       pub.formatVersion = 1;
+    }
+
+    if (pub.formatVersion === 1) {
+      pub.opacity = null;
+      pub.formatVersion = 2;
     }
 
     callback(true);
   }
 
-  client_load() { this._loadFont(); }
-  client_unload() { this._unloadFont(); }
+  client_load() { this.loadFont(); }
+  client_unload() { this.unloadFont(); }
 
-  save(assetPath: string, callback: Function) {
+  save(outputPath: string, callback: (err: Error) => void) {
+    this.write(fs.writeFile, outputPath, callback);
+  }
+
+  clientExport(outputPath: string, callback: (err: Error) => void) {
+    this.write(SupApp.writeFile, outputPath, callback);
+  }
+
+  private write(writeFile: Function, outputPath: string, callback: (err: Error) => void) {
     let font = this.pub.font;
     let bitmap = this.pub.bitmap;
+    const texture = this.pub.texture;
     delete this.pub.font;
     delete this.pub.bitmap;
-    let json = JSON.stringify(this.pub, null, 2);
+    delete this.pub.texture;
+
+    const json = JSON.stringify(this.pub, null, 2);
+
     this.pub.font = font;
     this.pub.bitmap = bitmap;
+    this.pub.texture = texture;
 
-    fs.writeFile(path.join(assetPath, "asset.json"), json, { encoding: "utf8" }, () => {
-      fs.writeFile(path.join(assetPath, "font.dat"), font, () => {
-        fs.writeFile(path.join(assetPath, "bitmap.dat"), bitmap, callback);
+    if (font instanceof ArrayBuffer) font = new Buffer(font);
+    if (bitmap instanceof ArrayBuffer) bitmap = new Buffer(bitmap);
+
+    writeFile(path.join(outputPath, "asset.json"), json, { encoding: "utf8" }, () => {
+      writeFile(path.join(outputPath, "font.dat"), font, () => {
+        writeFile(path.join(outputPath, "bitmap.dat"), bitmap, callback);
       });
     });
   }
 
-  _loadFont() {
-    this._unloadFont();
+  private loadFont() {
+    this.unloadFont();
 
-    if (this.pub.isBitmap) this._loadBitmapFont();
-    else this._loadTTFont();
+    if (this.pub.isBitmap) this.loadBitmapFont();
+    else this.loadTTFont();
   }
 
-  _unloadFont() {
+  private unloadFont() {
     if (this.url != null) URL.revokeObjectURL(this.url);
 
     if (this.font != null) delete this.font;
@@ -130,23 +168,23 @@ export default class FontAsset extends SupCore.Data.Base.Asset {
     }
   }
 
-  _loadTTFont() {
+  private loadTTFont() {
     if ((<any>this.pub.font).byteLength === 0) return;
 
-    let typedArray = new Uint8Array(this.pub.font);
-    let blob = new Blob([ typedArray ], { type: "font/*" });
+    const typedArray = new Uint8Array(this.pub.font);
+    const blob = new Blob([ typedArray ], { type: "font/*" });
     this.url = URL.createObjectURL(blob);
     this.pub.name = `Font${this.id}`;
     this.font = new FontFace(this.pub.name, `url(${this.url})`);
     (<any>document).fonts.add(this.font);
   }
 
-  _loadBitmapFont() {
+  private loadBitmapFont() {
     if ((<any>this.pub.bitmap).byteLength === 0) return;
 
-    let image = new Image();
-    let typedArray = new Uint8Array(this.pub.bitmap);
-    let blob = new Blob([ typedArray ], { type: "image/*" });
+    const image = new Image();
+    const typedArray = new Uint8Array(this.pub.bitmap);
+    const blob = new Blob([ typedArray ], { type: "image/*" });
     this.url = URL.createObjectURL(blob);
     image.src = this.url;
 
@@ -159,7 +197,7 @@ export default class FontAsset extends SupCore.Data.Base.Asset {
     if (!image.complete) image.addEventListener("load", () => { this.pub.texture.needsUpdate = true; });
   }
 
-  _setupFiltering() {
+  private setupFiltering() {
     if (this.pub.texture != null) {
       if (this.pub.filtering === "pixelated") {
         this.pub.texture.magFilter = THREE.NearestFilter;
@@ -172,13 +210,13 @@ export default class FontAsset extends SupCore.Data.Base.Asset {
     }
   }
 
-  server_upload(client: any, font: any, callback: (err: string, font: any) => any) {
-    if (!(font instanceof Buffer)) { callback("Image must be an ArrayBuffer", null); return; }
+  server_upload(client: SupCore.RemoteClient, font: any, callback: UploadCallback) {
+    if (!(font instanceof Buffer)) { callback("Image must be an ArrayBuffer"); return; }
 
     if (this.pub.isBitmap) this.pub.bitmap = font;
     else this.pub.font = font;
 
-    callback(null, font);
+    callback(null, null, font);
     this.emit("change");
   }
 
@@ -186,13 +224,13 @@ export default class FontAsset extends SupCore.Data.Base.Asset {
     if (this.pub.isBitmap) this.pub.bitmap = font;
     else this.pub.font = font;
 
-    this._loadFont();
+    this.loadFont();
   }
 
   client_setProperty(path: string, value: any) {
     super.client_setProperty(path, value);
 
-    if (path === "isBitmap") this._loadFont();
-    if (path === "filtering") this._setupFiltering();
+    if (path === "isBitmap") this.loadFont();
+    if (path === "filtering") this.setupFiltering();
   }
 }

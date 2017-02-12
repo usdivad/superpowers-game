@@ -1,4 +1,4 @@
-let serverRequire = require;
+const serverRequire = require;
 let THREE: typeof SupEngine.THREE;
 // NOTE: It is important that we require THREE through SupEngine
 // so that we inherit any settings, like the global Euler order
@@ -16,6 +16,16 @@ import * as _ from "lodash";
 
 import { Component } from "./SceneComponents";
 import SceneNodes, { Node } from "./SceneNodes";
+
+type AddNodeCallback = SupCore.Data.Base.ErrorCallback & ((err: string, nodeId: string, node: Node, parentId: string, index: number) => void);
+type SetNodePropertyCallback = SupCore.Data.Base.ErrorCallback & ((err: string, ack: any, id: string, path: string, value: any) => void);
+type MoveNodeCallback = SupCore.Data.Base.ErrorCallback & ((err: string, ack: any, id: string, parentId: string, index: number) => void);
+type DuplicateNodeCallback = SupCore.Data.Base.ErrorCallback & ((err: string, nodeId: string, rootNode: Node, newNodes: DuplicatedNode[]) => void);
+type RemoveNodeCallback = SupCore.Data.Base.ErrorCallback & ((err: string, ack: any, id: string) => void);
+
+type AddComponentCallback = SupCore.Data.Base.ErrorCallback & ((err: string, componentId: string, component: Component, nodeId: string, index: number) => void);
+type EditComponentCallback = SupCore.Data.Base.ErrorCallback & ((err: string, ack: any, nodeId: string, componentId: string, command: string, ...args: any[]) => void);
+type RemoveComponentCallback = SupCore.Data.Base.ErrorCallback & ((err: string, ack: any, nodeId: string, componentId: string) => void);
 
 export interface DuplicatedNode {
   node: Node;
@@ -68,46 +78,52 @@ export default class SceneAsset extends SupCore.Data.Base.Asset {
   migrate(assetPath: string, pub: ScenePub, callback: (hasMigrated: boolean) => void) {
     // Migrate component configs
     let hasMigratedComponents = false;
-    let componentClasses = this.server.system.getPlugins<SupCore.Data.ComponentConfigClass>("componentConfigs");
-    let walk = (node: Node) => {
-      for (let component of node.components) {
+    const componentClasses = this.server.system.getPlugins<SupCore.Data.ComponentConfigClass>("componentConfigs");
+    const walk = (node: Node) => {
+      for (const component of node.components) {
         const componentClass = componentClasses[component.type];
         if (componentClass.migrate != null && componentClass.migrate(component.config))
           hasMigratedComponents = true;
       }
 
-      for (let child of node.children) walk(child);
+      for (const child of node.children) walk(child);
     };
-    for (let node of pub.nodes) walk(node);
+    for (const node of pub.nodes) walk(node);
 
     if (pub.formatVersion === SceneAsset.currentFormatVersion) { callback(hasMigratedComponents); return; }
 
-    if (pub.formatVersion == null) {
-      // node.prefabId used to be set to the empty string
-      // when the node was a prefab but had no scene associated.
-      //
-      // It was replaced with node.prefab.sceneAssetId
-      // in Superpowers v0.16.
-      function migratePrefab(node: Node) {
-        let oldPrefabId = (node as any).prefabId;
-        if (oldPrefabId != null) {
-          delete (node as any).prefabId;
-          node.prefab = { sceneAssetId: oldPrefabId.length > 0 ? oldPrefabId : null };
-        } else {
-          for (let child of node.children) migratePrefab(child);
-        }
+    // node.prefabId used to be set to the empty string
+    // when the node was a prefab but had no scene associated.
+    // It was replaced with node.prefab.sceneAssetId
+    // in Superpowers v0.16.
+    function migrateOldPrefab(node: Node) {
+      const oldPrefabId = (node as any).prefabId;
+      if (oldPrefabId != null) {
+        delete (node as any).prefabId;
+        node.prefab = { sceneAssetId: oldPrefabId.length > 0 ? oldPrefabId : null };
+      } else {
+        for (const child of node.children) migrateOldPrefab(child);
       }
-      for (let rootNode of pub.nodes) migratePrefab(rootNode);
-
+    }
+    if (pub.formatVersion == null) {
+      for (const rootNode of pub.nodes) migrateOldPrefab(rootNode);
       pub.formatVersion = 1;
     }
 
     callback(true);
   }
 
-  save(assetPath: string, callback: (err: Error) => any) {
-    let json = JSON.stringify(this.pub, null, 2);
-    fs.writeFile(path.join(assetPath, "scene.json"), json, { encoding: "utf8" }, callback);
+  save(outputPath: string, callback: (err: Error) => void) {
+    this.write(fs.writeFile, outputPath, callback);
+  }
+
+  clientExport(outputPath: string, callback: (err: Error) => void) {
+    this.write(SupApp.writeFile, outputPath, callback);
+  }
+
+  private write(writeFile: Function, outputPath: string, callback: (err: Error) => any) {
+    const json = JSON.stringify(this.pub, null, 2);
+    writeFile(path.join(outputPath, "scene.json"), json, { encoding: "utf8" }, callback);
   }
 
   setup() {
@@ -121,11 +137,11 @@ export default class SceneAsset extends SupCore.Data.Base.Asset {
       if (node.prefab != null && node.prefab.sceneAssetId != null) this._onAddComponentDependencies(`${node.id}_${node.prefab.sceneAssetId}`, [ node.prefab.sceneAssetId ]);
     });
 
-    for (let nodeId in this.nodes.componentsByNodeId) {
-      let components = this.nodes.componentsByNodeId[nodeId];
-      for (let componentId in components.configsById) {
-        let config = components.configsById[componentId];
-        let componentPath = `${nodeId}_${componentId}`;
+    for (const nodeId in this.nodes.componentsByNodeId) {
+      const components = this.nodes.componentsByNodeId[nodeId];
+      for (const componentId in components.configsById) {
+        const config = components.configsById[componentId];
+        const componentPath = `${nodeId}_${componentId}`;
         ((config: SupCore.Data.Base.ComponentConfig, componentPath: string) => {
           config.on("addDependencies", (depIds: string[]) => { this._onAddComponentDependencies(componentPath, depIds); });
           config.on("removeDependencies", (depIds: string[]) => { this._onRemoveComponentDependencies(componentPath, depIds); });
@@ -145,25 +161,25 @@ export default class SceneAsset extends SupCore.Data.Base.Asset {
     this.emit("addDependencies", Object.keys(this.componentPathsByDependentAssetId));
   }
 
-  server_addNode(client: any, name: string, options: any, callback: (err: string, node: Node, parentId: string, index: number) => any) {
-    if (name.indexOf("/") !== -1) { callback("Actor name cannot contain slashes", null, null, null); return; }
+  server_addNode(client: SupCore.RemoteClient, name: string, options: any, callback: AddNodeCallback) {
+    if (name.indexOf("/") !== -1) { callback("Actor name cannot contain slashes"); return; }
 
-    let parentId = (options != null) ? options.parentId : null;
-    let parentNode = this.nodes.byId[parentId];
+    const parentId = (options != null) ? options.parentId : null;
+    const parentNode = this.nodes.byId[parentId];
     if (parentNode != null && parentNode.prefab != null) {
-      callback("Can't create children node on prefabs", null, null, null);
+      callback("Can't create children node on prefabs");
       return;
     }
 
     if (this.nodes.pub.length !== 0 && parentNode == null) {
-      let entry = this.server.data.entries.byId[this.id];
+      const entry = this.server.data.entries.byId[this.id];
       if (entry.dependentAssetIds.length > 0) {
-        callback("A prefab can only have one root actor", null, null, null);
+        callback("A prefab can only have one root actor");
         return;
       }
     }
 
-    let sceneNode: Node = {
+    const sceneNode: Node = {
       id: null, name: name, children: <Node[]>[], components: <Component[]>[],
       position: (options != null && options.transform != null && options.transform.position != null) ? options.transform.position : { x: 0, y: 0, z: 0 },
       orientation: (options != null && options.transform != null && options.transform.orientation != null) ? options.transform.orientation : { x: 0, y: 0, z: 0, w: 1 },
@@ -171,11 +187,11 @@ export default class SceneAsset extends SupCore.Data.Base.Asset {
       visible: true, layer: 0, prefab: (options.prefab) ? { sceneAssetId: null } : null
     };
 
-    let index = (options != null) ? options.index : null;
+    const index = (options != null) ? options.index : null;
     this.nodes.add(sceneNode, parentId, index, (err, actualIndex) => {
-      if (err != null) { callback(err, null, null, null); return; }
+      if (err != null) { callback(err); return; }
 
-      callback(null, sceneNode, parentId, actualIndex);
+      callback(null, sceneNode.id, sceneNode, parentId, actualIndex);
       this.emit("change");
     });
   }
@@ -184,13 +200,13 @@ export default class SceneAsset extends SupCore.Data.Base.Asset {
     this.nodes.client_add(node, parentId, index);
   }
 
-  server_setNodeProperty(client: any, id: string, path: string, value: any, callback: (err: string, id: string, path: string, value: any) => any) {
-    if (path === "name" && value.indexOf("/") !== -1) { callback("Actor name cannot contain slashes", null, null, null); return; }
+  server_setNodeProperty(client: SupCore.RemoteClient, id: string, path: string, value: any, callback: SetNodePropertyCallback) {
+    if (path === "name" && value.indexOf("/") !== -1) { callback("Actor name cannot contain slashes"); return; }
 
     this.nodes.setProperty(id, path, value, (err, actualValue) => {
-      if (err != null) { callback(err, null, null, null); return; }
+      if (err != null) { callback(err); return; }
 
-      callback(null, id, path, actualValue);
+      callback(null, null, id, path, actualValue);
       this.emit("change");
     });
   }
@@ -199,57 +215,57 @@ export default class SceneAsset extends SupCore.Data.Base.Asset {
     this.nodes.client_setProperty(id, path, value);
   }
 
-  server_moveNode(client: any, id: string, parentId: string, index: number, callback: (err: string, id: string, parentId: string, index: number) => any) {
-    let node = this.nodes.byId[id];
-    if (node == null) { callback(`Invalid node id: ${id}`, null, null, null); return; }
+  server_moveNode(client: SupCore.RemoteClient, id: string, parentId: string, index: number, callback: MoveNodeCallback) {
+    const node = this.nodes.byId[id];
+    if (node == null) { callback(`Invalid node id: ${id}`); return; }
 
-    let parentNode = this.nodes.byId[parentId];
+    const parentNode = this.nodes.byId[parentId];
     if (parentNode != null && parentNode.prefab != null) {
-      callback("Can't move children node on prefabs", null, null, null);
+      callback("Can't move children node on prefabs");
       return;
     }
 
     if (parentNode == null) {
-      let entry = this.server.data.entries.byId[this.id];
+      const entry = this.server.data.entries.byId[this.id];
       if (entry.dependentAssetIds.length > 0) {
-        callback("A prefab can only have one root actor", null, null, null);
+        callback("A prefab can only have one root actor");
         return;
       }
     }
 
-    let globalMatrix = this.computeGlobalMatrix(node);
+    const globalMatrix = this.computeGlobalMatrix(node);
 
     this.nodes.move(id, parentId, index, (err, actualIndex) => {
-      if (err != null) { callback(err, null, null, null); return; }
+      if (err != null) { callback(err); return; }
 
       this.applyGlobalMatrix(node, globalMatrix);
 
-      callback(null, id, parentId, actualIndex);
+      callback(null, null, id, parentId, actualIndex);
       this.emit("change");
     });
   }
 
   computeGlobalMatrix(node: Node) {
-    let matrix = new THREE.Matrix4().compose(<THREE.Vector3>node.position, <THREE.Quaternion>node.orientation, <THREE.Vector3>node.scale);
+    const matrix = new THREE.Matrix4().compose(<THREE.Vector3>node.position, <THREE.Quaternion>node.orientation, <THREE.Vector3>node.scale);
 
-    let parentNode = this.nodes.parentNodesById[node.id];
+    const parentNode = this.nodes.parentNodesById[node.id];
     if (parentNode != null) {
-      let parentGlobalMatrix = this.computeGlobalMatrix(parentNode);
+      const parentGlobalMatrix = this.computeGlobalMatrix(parentNode);
       matrix.multiplyMatrices(parentGlobalMatrix, matrix);
     }
     return matrix;
   }
 
   applyGlobalMatrix(node: Node, matrix: THREE.Matrix4) {
-    let parentNode = this.nodes.parentNodesById[node.id];
+    const parentNode = this.nodes.parentNodesById[node.id];
     if (parentNode != null) {
-      let parentGlobalMatrix = this.computeGlobalMatrix(parentNode);
+      const parentGlobalMatrix = this.computeGlobalMatrix(parentNode);
       matrix.multiplyMatrices(new THREE.Matrix4().getInverse(parentGlobalMatrix), matrix);
     }
 
-    let position = new THREE.Vector3();
-    let orientation = new THREE.Quaternion();
-    let scale = new THREE.Vector3();
+    const position = new THREE.Vector3();
+    const orientation = new THREE.Quaternion();
+    const scale = new THREE.Vector3();
     matrix.decompose(position, orientation, scale);
     node.position = { x: position.x, y: position.y, z: position.z };
     node.orientation = { x: orientation.x, y: orientation.y, z: orientation.z, w: orientation.w };
@@ -257,37 +273,37 @@ export default class SceneAsset extends SupCore.Data.Base.Asset {
   }
 
   client_moveNode(id: string, parentId: string, index: number) {
-    let node = this.nodes.byId[id];
-    let globalMatrix = this.computeGlobalMatrix(node);
+    const node = this.nodes.byId[id];
+    const globalMatrix = this.computeGlobalMatrix(node);
     this.nodes.client_move(id, parentId, index);
     this.applyGlobalMatrix(node, globalMatrix);
   }
 
 
-  server_duplicateNode(client: any, newName: string, id: string, index: number, callback: (err: string, rootNode: Node, newNodes: DuplicatedNode[]) => any) {
-    if (newName.indexOf("/") !== -1) { callback("Actor name cannot contain slashes", null, null); return; }
+  server_duplicateNode(client: SupCore.RemoteClient, newName: string, id: string, index: number, callback: DuplicateNodeCallback) {
+    if (newName.indexOf("/") !== -1) { callback("Actor name cannot contain slashes"); return; }
 
-    let referenceNode = this.nodes.byId[id];
-    if (referenceNode == null) { callback(`Invalid node id: ${id}`, null, null); return; }
+    const referenceNode = this.nodes.byId[id];
+    if (referenceNode == null) { callback(`Invalid node id: ${id}`); return; }
 
-    let parentNode = this.nodes.parentNodesById[id];
+    const parentNode = this.nodes.parentNodesById[id];
     if (parentNode == null) {
-      let entry = this.server.data.entries.byId[this.id];
+      const entry = this.server.data.entries.byId[this.id];
       if (entry.dependentAssetIds.length > 0) {
-        callback("A prefab can only have one root actor", null, null);
+        callback("A prefab can only have one root actor");
         return;
       }
     }
 
-    let newNodes: DuplicatedNode[] = [];
+    const newNodes: DuplicatedNode[] = [];
     let totalNodeCount = 0;
-    let walk = (node: Node) => {
+    const walk = (node: Node) => {
       totalNodeCount += 1;
-      for (let childNode of node.children) walk(childNode);
+      for (const childNode of node.children) walk(childNode);
     };
     walk(referenceNode);
 
-    let rootNode: Node = {
+    const rootNode: Node = {
       id: null, name: newName, children: [],
       components: _.cloneDeep(referenceNode.components),
       position: _.cloneDeep(referenceNode.position),
@@ -295,15 +311,15 @@ export default class SceneAsset extends SupCore.Data.Base.Asset {
       scale: _.cloneDeep(referenceNode.scale),
       visible: referenceNode.visible, layer: referenceNode.layer, prefab: _.cloneDeep(referenceNode.prefab)
     };
-    let parentId = (parentNode != null) ? parentNode.id : null;
+    const parentId = (parentNode != null) ? parentNode.id : null;
 
-    let addNode = (newNode: Node, parentId: string, index: number, children: Node[]) => {
+    const addNode = (newNode: Node, parentId: string, index: number, children: Node[]) => {
       this.nodes.add(newNode, parentId, index, (err, actualIndex) => {
-        if (err != null) { callback(err, null, null); return; }
+        if (err != null) { callback(err); return; }
 
-        for (let componentId in this.nodes.componentsByNodeId[newNode.id].configsById) {
-          let config = this.nodes.componentsByNodeId[newNode.id].configsById[componentId];
-          let componentPath = `${newNode.id}_${componentId}`;
+        for (const componentId in this.nodes.componentsByNodeId[newNode.id].configsById) {
+          const config = this.nodes.componentsByNodeId[newNode.id].configsById[componentId];
+          const componentPath = `${newNode.id}_${componentId}`;
           ((config: SupCore.Data.Base.ComponentConfig, componentPath: string) => {
             config.on("addDependencies", (depIds: string[]) => { this._onAddComponentDependencies(componentPath, depIds); });
             config.on("removeDependencies", (depIds: string[]) => { this._onRemoveComponentDependencies(componentPath, depIds); });
@@ -314,13 +330,13 @@ export default class SceneAsset extends SupCore.Data.Base.Asset {
         newNodes.push({ node: newNode, parentId, index: actualIndex });
 
         if (newNodes.length === totalNodeCount) {
-          callback(null, rootNode, newNodes);
+          callback(null, rootNode.id, rootNode, newNodes);
           this.emit("change");
         }
 
         for (let childIndex = 0; childIndex < children.length; childIndex++) {
-          let childNode = children[childIndex];
-          let node: Node = {
+          const childNode = children[childIndex];
+          const node: Node = {
             id: null, name: childNode.name, children: [],
             components: _.cloneDeep(childNode.components),
             position: _.cloneDeep(childNode.position),
@@ -336,17 +352,17 @@ export default class SceneAsset extends SupCore.Data.Base.Asset {
   }
 
   client_duplicateNode(rootNode: Node, newNodes: DuplicatedNode[]) {
-    for (let newNode of newNodes) {
+    for (const newNode of newNodes) {
       newNode.node.children.length = 0;
       this.nodes.client_add(newNode.node, newNode.parentId, newNode.index);
     }
   }
 
-  server_removeNode(client: any, id: string, callback: (err: string, id: string) => any) {
+  server_removeNode(client: SupCore.RemoteClient, id: string, callback: RemoveNodeCallback) {
     this.nodes.remove(id, (err) => {
-      if (err != null) { callback(err, null); return; }
+      if (err != null) { callback(err); return; }
 
-      callback(null, id);
+      callback(null, null, id);
       this.emit("change");
     });
   }
@@ -358,11 +374,11 @@ export default class SceneAsset extends SupCore.Data.Base.Asset {
   // Components
   _onAddComponentDependencies(componentPath: string, depIds: string[]) {
     // console.log `Adding component dependencies: ${componentPath} - ${depIds}`
-    let addedDepIds: string[] = [];
+    const addedDepIds: string[] = [];
 
-    for (let depId of depIds) {
+    for (const depId of depIds) {
       if (this.componentPathsByDependentAssetId[depId] == null) this.componentPathsByDependentAssetId[depId] = [];
-      let componentPaths = this.componentPathsByDependentAssetId[depId];
+      const componentPaths = this.componentPathsByDependentAssetId[depId];
       if (componentPaths.indexOf(componentPath) === -1) {
         componentPaths.push(componentPath);
         if (componentPaths.length === 1) addedDepIds.push(depId);
@@ -374,11 +390,11 @@ export default class SceneAsset extends SupCore.Data.Base.Asset {
 
   _onRemoveComponentDependencies(componentPath: string, depIds: string[]) {
     // console.log `Removing component dependencies: ${componentPath} - ${depIds}`
-    let removedDepIds: string[] = [];
+    const removedDepIds: string[] = [];
 
-    for (let depId of depIds) {
-      let componentPaths = this.componentPathsByDependentAssetId[depId];
-      let index = (componentPaths != null) ? componentPaths.indexOf(componentPath) : null;
+    for (const depId of depIds) {
+      const componentPaths = this.componentPathsByDependentAssetId[depId];
+      const index = (componentPaths != null) ? componentPaths.indexOf(componentPath) : null;
       if (index != null && index !== -1) {
         componentPaths.splice(index, 1);
 
@@ -392,31 +408,30 @@ export default class SceneAsset extends SupCore.Data.Base.Asset {
     if (removedDepIds.length > 0) this.emit("removeDependencies", removedDepIds);
   };
 
-  server_addComponent(client: any, nodeId: string, componentType: string, index: number,
-  callback: (err: string, component: Component, nodeId: string, index: number) => any) {
+  server_addComponent(client: SupCore.RemoteClient, nodeId: string, componentType: string, index: number, callback: AddComponentCallback) {
 
-    let componentConfigClass = this.server.system.getPlugins<SupCore.Data.ComponentConfigClass>("componentConfigs")[componentType];
-    if (componentConfigClass == null) { callback("Invalid component type", null, null, null); return; }
+    const componentConfigClass = this.server.system.getPlugins<SupCore.Data.ComponentConfigClass>("componentConfigs")[componentType];
+    if (componentConfigClass == null) { callback("Invalid component type"); return; }
 
-    let node = this.nodes.byId[nodeId];
+    const node = this.nodes.byId[nodeId];
 
-    if (node != null && node.prefab != null) { callback("Can't add component on prefabs", null, null, null); return; }
+    if (node != null && node.prefab != null) { callback("Can't add component on prefabs"); return; }
 
-    let component: Component = {
+    const component: Component = {
       type: componentType,
       config: componentConfigClass.create(),
     };
 
     this.nodes.addComponent(nodeId, component, index, (err, actualIndex) => {
-      if (err != null) { callback(err, null, null, null); return; }
+      if (err != null) { callback(err); return; }
 
-      let config = this.nodes.componentsByNodeId[nodeId].configsById[component.id];
+      const config = this.nodes.componentsByNodeId[nodeId].configsById[component.id];
 
-      let componentPath = `${nodeId}_${component.id}`;
+      const componentPath = `${nodeId}_${component.id}`;
       config.on("addDependencies", (depIds: string[]) => { this._onAddComponentDependencies(componentPath, depIds); });
       config.on("removeDependencies", (depIds: string[]) => { this._onRemoveComponentDependencies(componentPath, depIds); });
 
-      callback(null, component, nodeId, actualIndex);
+      callback(null, component.id, component, nodeId, actualIndex);
       this.emit("change");
     });
   }
@@ -425,41 +440,41 @@ export default class SceneAsset extends SupCore.Data.Base.Asset {
     this.nodes.client_addComponent(nodeId, component, index);
   }
 
-  server_editComponent(client: any, nodeId: string, componentId: string, command: string, ...args: any[]) {
-    let callback: (err: string, nodeId: string, componentId: string, command: string, ...args: any[]) => any = args.pop();
+  server_editComponent(client: SupCore.RemoteClient, nodeId: string, componentId: string, command: string, ...args: any[]) {
+    const callback: EditComponentCallback = args.pop();
 
-    let components = this.nodes.componentsByNodeId[nodeId];
-    if (components == null) { callback(`Invalid node id: ${nodeId}`, null, null, null, null); return; }
+    const components = this.nodes.componentsByNodeId[nodeId];
+    if (components == null) { callback(`Invalid node id: ${nodeId}`); return; }
 
-    let componentConfig = components.configsById[componentId];
-    if (componentConfig == null) { callback(`Invalid component id: ${componentId}`, null, null, null, null); return; }
+    const componentConfig = components.configsById[componentId];
+    if (componentConfig == null) { callback(`Invalid component id: ${componentId}`); return; }
 
-    let commandMethod = (<any>componentConfig)[`server_${command}`];
-    if (commandMethod == null) { callback("Invalid component command", null, null, null, null); return; }
+    const commandMethod = (<any>componentConfig)[`server_${command}`];
+    if (commandMethod == null) { callback("Invalid component command"); return; }
 
     commandMethod.call(componentConfig, client, ...args, (err: string, ...callbackArgs: any[]) => {
-      if (err != null) { callback(err, null, null, null, null); return; }
+      if (err != null) { callback(err); return; }
 
-      callback(null, nodeId, componentId, command, ...callbackArgs);
+      callback(null, null, nodeId, componentId, command, ...callbackArgs);
       this.emit("change");
     });
   }
 
   client_editComponent(nodeId: string, componentId: string, command: string, ...args: any[]) {
-    let componentConfig = this.nodes.componentsByNodeId[nodeId].configsById[componentId];
+    const componentConfig = this.nodes.componentsByNodeId[nodeId].configsById[componentId];
 
-    let commandMethod = (<any>componentConfig)[`client_${command}`];
-    commandMethod.call(componentConfig, ...args);
+    const commandMethod = (<any>componentConfig)[`client_${command}`];
+    commandMethod.apply(componentConfig, args);
   }
 
-  server_removeComponent(client: any, nodeId: string, componentId: string, callback: (err: string, nodeId: string, componentId: string) => any) {
-    let components = this.nodes.componentsByNodeId[nodeId];
-    if (components == null) { callback(`Invalid node id: ${nodeId}`, null, null); return; }
+  server_removeComponent(client: SupCore.RemoteClient, nodeId: string, componentId: string, callback: RemoveComponentCallback) {
+    const components = this.nodes.componentsByNodeId[nodeId];
+    if (components == null) { callback(`Invalid node id: ${nodeId}`); return; }
 
     components.remove(componentId, (err) => {
-      if (err != null) { callback(err, null, null); return; }
+      if (err != null) { callback(err); return; }
 
-      callback(null, nodeId, componentId);
+      callback(null, null, nodeId, componentId);
       this.emit("change");
     });
   }

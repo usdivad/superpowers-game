@@ -7,26 +7,27 @@ export default class P2BodyEditor {
 
   sizeRow: SupClient.table.RowParts;
   radiusRow: SupClient.table.RowParts;
+  angleRow: SupClient.table.RowParts;
 
   constructor(tbody: HTMLTableSectionElement, config: any, projectClient: SupClient.ProjectClient, editConfig: any) {
     this.tbody = tbody;
     this.projectClient = projectClient;
     this.editConfig = editConfig;
 
-    let massRow = SupClient.table.appendRow(this.tbody, SupClient.i18n.t("componentEditors:P2Body.mass"));
+    const massRow = SupClient.table.appendRow(this.tbody, SupClient.i18n.t("componentEditors:P2Body.mass"));
     this.fields["mass"] = SupClient.table.appendNumberField(massRow.valueCell, config.mass, { min: 0 });
     this.fields["mass"].addEventListener("change", (event: any) => {
       this.editConfig("setProperty", "mass", parseFloat(event.target.value));
     });
 
-    let fixedRotationRow = SupClient.table.appendRow(this.tbody, SupClient.i18n.t("componentEditors:P2Body.fixedRotation"));
+    const fixedRotationRow = SupClient.table.appendRow(this.tbody, SupClient.i18n.t("componentEditors:P2Body.fixedRotation"));
     this.fields["fixedRotation"] = SupClient.table.appendBooleanField(fixedRotationRow.valueCell, config.fixedRotation);
     this.fields["fixedRotation"].addEventListener("click", (event: any) => {
       this.editConfig("setProperty", "fixedRotation", event.target.checked);
     });
 
-    let offsetRow = SupClient.table.appendRow(this.tbody, SupClient.i18n.t("componentEditors:P2Body.offset"));
-    let offsetFields = SupClient.table.appendNumberFields(offsetRow.valueCell, [config.offsetX, config.offsetY]);
+    const offsetRow = SupClient.table.appendRow(this.tbody, SupClient.i18n.t("componentEditors:P2Body.offset"));
+    const offsetFields = SupClient.table.appendNumberFields(offsetRow.valueCell, [config.offsetX, config.offsetY]);
     this.fields["offsetX"] = offsetFields[0];
     this.fields["offsetX"].addEventListener("change", (event: any) => {
       this.editConfig("setProperty", "offsetX", parseFloat(event.target.value));
@@ -37,8 +38,8 @@ export default class P2BodyEditor {
       this.editConfig("setProperty", "offsetY", parseFloat(event.target.value));
     });
 
-    let shapeRow = SupClient.table.appendRow(this.tbody, SupClient.i18n.t("componentEditors:P2Body.shape"));
-    let shapeOptions: { [key: string]: string} = {
+    const shapeRow = SupClient.table.appendRow(this.tbody, SupClient.i18n.t("componentEditors:P2Body.shape"));
+    const shapeOptions: { [key: string]: string} = {
       "box": SupClient.i18n.t("componentEditors:P2Body.shapeOptions.box"),
       "circle": SupClient.i18n.t("componentEditors:P2Body.shapeOptions.circle")
     };
@@ -50,7 +51,7 @@ export default class P2BodyEditor {
     // Box
     this.sizeRow = SupClient.table.appendRow(this.tbody, SupClient.i18n.t("componentEditors:P2Body.size"));
 
-    let sizeFields = SupClient.table.appendNumberFields(this.sizeRow.valueCell, [config.width, config.height], 0);
+    const sizeFields = SupClient.table.appendNumberFields(this.sizeRow.valueCell, [config.width, config.height], 0);
     this.fields["width"] = sizeFields[0];
     this.fields["width"].addEventListener("change", (event: any) => {
       this.editConfig("setProperty", "width", parseFloat(event.target.value));
@@ -59,6 +60,12 @@ export default class P2BodyEditor {
     this.fields["height"] = sizeFields[1];
     this.fields["height"].addEventListener("change", (event: any) => {
       this.editConfig("setProperty", "height", parseFloat(event.target.value));
+    });
+
+    this.angleRow = SupClient.table.appendRow(this.tbody, SupClient.i18n.t("componentEditors:P2Body.angle"));
+    this.fields["angle"] = SupClient.table.appendNumberField(this.angleRow.valueCell, config.angle, { min: -360, max: 360 });
+    this.fields["angle"].addEventListener("change", (event: any) => {
+      this.editConfig("setProperty", "angle", parseFloat(event.target.value));
     });
 
     // Circle
@@ -76,11 +83,13 @@ export default class P2BodyEditor {
       case "box": {
         this.sizeRow.row.hidden = false;
         this.radiusRow.row.hidden = true;
+        this.angleRow.row.hidden = false;
       } break;
 
       case "circle": {
         this.sizeRow.row.hidden = true;
         this.radiusRow.row.hidden = false;
+        this.angleRow.row.hidden = true;
       } break;
     }
   }

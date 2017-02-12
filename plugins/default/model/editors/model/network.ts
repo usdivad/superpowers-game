@@ -14,24 +14,28 @@ SupClient.i18n.load([{ root: `${window.location.pathname}/../..`, name: "modelEd
   socket.on("disconnect", SupClient.onDisconnected);
 });
 
-let onEditCommands: any = {};
+const onEditCommands: { [command: string]: Function } = {};
 function onConnected() {
   data = {};
   data.projectClient = new SupClient.ProjectClient(socket, { subEntries: false });
 
-  let modelActor = new SupEngine.Actor(engine.gameInstance, "Model");
-  let modelRenderer = new ModelRenderer(modelActor);
-  let config: any = { modelAssetId: SupClient.query.asset, materialType: "phong", color: "ffffff" };
-  let receiveCallbacks = { model: onAssetReceived };
-  let editCallbacks = { model: onEditCommands };
+  const modelActor = new SupEngine.Actor(engine.gameInstance, "Model");
+  const modelRenderer = new ModelRenderer(modelActor);
+  const config = { modelAssetId: SupClient.query.asset, materialType: "phong", color: "ffffff" };
 
-  data.modelUpdater = new ModelRenderer.Updater(data.projectClient, modelRenderer, config, receiveCallbacks, editCallbacks);
+  const subscriber: SupClient.AssetSubscriber = {
+    onAssetReceived,
+    onAssetEdited: (assetId, command, ...args) => { if (onEditCommands[command] != null) onEditCommands[command](...args); },
+    onAssetTrashed: SupClient.onAssetTrashed
+  };
+
+  data.modelUpdater = new ModelRendererUpdater(data.projectClient, modelRenderer, config, subscriber);
 }
 
 function onAssetReceived() {
-  let pub = data.modelUpdater.modelAsset.pub;
+  const pub = data.modelUpdater.modelAsset.pub;
   for (let index = 0; index < pub.animations.length; index++) {
-    let animation = pub.animations[index];
+    const animation = pub.animations[index];
     setupAnimation(animation, index);
   }
 
@@ -40,11 +44,11 @@ function onAssetReceived() {
   ui.unitRatioInput.value = pub.unitRatio.toString();
   setupOpacity(pub.opacity);
 
-  for (let mapName in pub.maps) if (pub.maps[mapName] != null) setupMap(mapName);
-  for (let slotName in pub.mapSlots) ui.mapSlotsInput[slotName].value = pub.mapSlots[slotName] != null ? pub.mapSlots[slotName] : "";
+  for (const mapName in pub.maps) if (pub.maps[mapName] != null) setupMap(mapName);
+  for (const slotName in pub.mapSlots) ui.mapSlotsInput[slotName].value = pub.mapSlots[slotName] != null ? pub.mapSlots[slotName] : "";
 }
 
-onEditCommands.setProperty = (path: string, value: any) => {
+onEditCommands["setProperty"] = (path: string, value: any) => {
   switch (path) {
     case "filtering":
       ui.filteringSelect.value = value;
@@ -61,53 +65,53 @@ onEditCommands.setProperty = (path: string, value: any) => {
   }
 };
 
-onEditCommands.newAnimation = (animation: any, index: number) => {
+onEditCommands["newAnimation"] = (animation: any, index: number) => {
   setupAnimation(animation, index);
 };
 
-onEditCommands.deleteAnimation = (id: string) => {
-  let animationElt = ui.animationsTreeView.treeRoot.querySelector(`li[data-id="${id}"]`) as HTMLLIElement;
+onEditCommands["deleteAnimation"] = (id: string) => {
+  const animationElt = ui.animationsTreeView.treeRoot.querySelector(`li[data-id="${id}"]`) as HTMLLIElement;
   ui.animationsTreeView.remove(animationElt);
   if (ui.selectedAnimationId === id) updateSelectedAnimation();
 };
 
-onEditCommands.moveAnimation = (id: string, index: number) => {
-  let animationElt = ui.animationsTreeView.treeRoot.querySelector(`li[data-id="${id}"]`) as HTMLLIElement;
+onEditCommands["moveAnimation"] = (id: string, index: number) => {
+  const animationElt = ui.animationsTreeView.treeRoot.querySelector(`li[data-id="${id}"]`) as HTMLLIElement;
   ui.animationsTreeView.insertAt(animationElt, "item", index);
 };
 
-onEditCommands.setAnimationProperty = (id: string, key: string, value: any) => {
-  let animationElt = ui.animationsTreeView.treeRoot.querySelector(`li[data-id="${id}"]`) as HTMLLIElement;
+onEditCommands["setAnimationProperty"] = (id: string, key: string, value: any) => {
+  const animationElt = ui.animationsTreeView.treeRoot.querySelector(`li[data-id="${id}"]`) as HTMLLIElement;
 
   switch (key) {
     case "name": animationElt.querySelector(".name").textContent = value; break;
   }
 };
 
-onEditCommands.newMap = (name: string) => {
+onEditCommands["newMap"] = (name: string) => {
   setupMap(name);
 };
 
-onEditCommands.renameMap = (oldName: string, newName: string) => {
-  let pub = data.modelUpdater.modelAsset.pub;
+onEditCommands["renameMap"] = (oldName: string, newName: string) => {
+  const pub = data.modelUpdater.modelAsset.pub;
 
-  let textureElt = <HTMLLIElement>ui.texturesTreeView.treeRoot.querySelector(`[data-name="${oldName}"]`);
+  const textureElt = <HTMLLIElement>ui.texturesTreeView.treeRoot.querySelector(`[data-name="${oldName}"]`);
   textureElt.dataset["name"] = newName;
   textureElt.querySelector("span").textContent = newName;
 
-  for (let slotName in pub.mapSlots)
+  for (const slotName in pub.mapSlots)
     if (ui.mapSlotsInput[slotName].value === oldName) ui.mapSlotsInput[slotName].value = newName;
 };
 
-onEditCommands.deleteMap = (name: string) => {
-  let textureElt = ui.texturesTreeView.treeRoot.querySelector(`li[data-name="${name}"]`) as HTMLLIElement;
+onEditCommands["deleteMap"] = (name: string) => {
+  const textureElt = ui.texturesTreeView.treeRoot.querySelector(`li[data-name="${name}"]`) as HTMLLIElement;
   ui.texturesTreeView.remove(textureElt);
 
-  let pub = data.modelUpdater.modelAsset.pub;
-  for (let slotName in pub.mapSlots)
+  const pub = data.modelUpdater.modelAsset.pub;
+  for (const slotName in pub.mapSlots)
     if (ui.mapSlotsInput[slotName].value === name) ui.mapSlotsInput[slotName].value = "";
 };
 
-onEditCommands.setMapSlot = (slot: string, map: string) => {
+onEditCommands["setMapSlot"] = (slot: string, map: string) => {
   ui.mapSlotsInput[slot].value = map != null ? map : "";
 };

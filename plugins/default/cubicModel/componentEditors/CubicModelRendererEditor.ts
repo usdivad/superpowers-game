@@ -10,8 +10,7 @@ export default class CubicModelRendererEditor {
   animationId: string;
   shaderAssetId: string;
 
-  cubicModelTextField: HTMLInputElement;
-  cubicModelButtonElt: HTMLButtonElement;
+  cubicModelFieldSubscriber: SupClient.table.AssetFieldSubscriber;
   // animationSelectBox: HTMLSelectElement;
   // horizontalFlipField: HTMLInputElement;
   // verticalFlipField: HTMLInputElement;
@@ -36,29 +35,25 @@ export default class CubicModelRendererEditor {
     // this.animationId = config.animationId;
     // this.shaderAssetId = config.shaderAssetId;
 
-    let cubicModelRow = SupClient.table.appendRow(tbody, SupClient.i18n.t("componentEditors:CubicModelRenderer.cubicModel"));
-    let cubicModelFields = SupClient.table.appendAssetField(cubicModelRow.valueCell, "");
-    this.cubicModelTextField = cubicModelFields.textField;
-    this.cubicModelTextField.addEventListener("input", this.onChangeCubicModelAsset);
-    this.cubicModelTextField.disabled = true;
-    this.cubicModelButtonElt = cubicModelFields.buttonElt;
-    this.cubicModelButtonElt.addEventListener("click", (event) => {
-      window.parent.postMessage({ type: "openEntry", id: this.cubicModelAssetId }, window.location.origin);
+    const cubicModelRow = SupClient.table.appendRow(tbody, SupClient.i18n.t("componentEditors:CubicModelRenderer.cubicModel"));
+    this.cubicModelFieldSubscriber = SupClient.table.appendAssetField(cubicModelRow.valueCell, this.cubicModelAssetId, "cubicModel", projectClient);
+    this.cubicModelFieldSubscriber.on("select", (assetId: string) => {
+      this.editConfig("setProperty", "cubicModelAssetId", assetId);
+      // this.editConfig("setProperty", "animationId", null);
     });
-    this.cubicModelButtonElt.disabled = this.cubicModelAssetId == null;
 
     /*
-    let animationRow = SupClient.table.appendRow(tbody, "Animation");
+    const animationRow = SupClient.table.appendRow(tbody, "Animation");
     this.animationSelectBox = SupClient.table.appendSelectBox(animationRow.valueCell, { "": "(None)" });
     this.animationSelectBox.addEventListener("change", this._onChangeCubicModelAnimation);
     this.animationSelectBox.disabled = true;
 
-    let flipRow = SupClient.table.appendRow(tbody, "Flip");
-    let flipDiv = document.createElement("div") as HTMLDivElement;
+    const flipRow = SupClient.table.appendRow(tbody, "Flip");
+    const flipDiv = document.createElement("div") as HTMLDivElement;
     flipDiv.classList.add("inputs");
     flipRow.valueCell.appendChild(flipDiv);
 
-    let horizontalSpan = document.createElement("span");
+    const horizontalSpan = document.createElement("span");
     horizontalSpan.style.marginLeft = "5px";
     horizontalSpan.textContent = "H";
     flipDiv.appendChild(horizontalSpan);
@@ -67,7 +62,7 @@ export default class CubicModelRendererEditor {
       this.editConfig("setProperty", "horizontalFlip", event.target.checked);
     });
 
-    let verticalSpan = document.createElement("span");
+    const verticalSpan = document.createElement("span");
     verticalSpan.style.marginLeft = "5px";
     verticalSpan.textContent = "V";
     flipDiv.appendChild(verticalSpan);
@@ -76,12 +71,12 @@ export default class CubicModelRendererEditor {
       this.editConfig("setProperty", "verticalFlip", event.target.checked);
     });
 
-    let shadowRow = SupClient.table.appendRow(tbody, "Shadow");
-    let shadowDiv = document.createElement("div") as HTMLDivElement;
+    const shadowRow = SupClient.table.appendRow(tbody, "Shadow");
+    const shadowDiv = document.createElement("div") as HTMLDivElement;
     shadowDiv.classList.add("inputs");
     shadowRow.valueCell.appendChild(shadowDiv);
 
-    let castSpan = document.createElement("span");
+    const castSpan = document.createElement("span");
     castSpan.style.marginLeft = "5px";
     castSpan.textContent = "Cast";
     shadowDiv.appendChild(castSpan);
@@ -91,7 +86,7 @@ export default class CubicModelRendererEditor {
     });
     this.castShadowField.disabled = true;
 
-    let receiveSpan = document.createElement("span");
+    const receiveSpan = document.createElement("span");
     receiveSpan.style.marginLeft = "5px";
     receiveSpan.textContent = "Receive";
     shadowDiv.appendChild(receiveSpan);
@@ -101,8 +96,8 @@ export default class CubicModelRendererEditor {
     });
     this.receiveShadowField.disabled = true;
 
-    let colorRow = SupClient.table.appendRow(tbody, "Color");
-    let colorInputs = SupClient.table.appendColorField(colorRow.valueCell, config.color);
+    const colorRow = SupClient.table.appendRow(tbody, "Color");
+    const colorInputs = SupClient.table.appendColorField(colorRow.valueCell, config.color);
 
     this.colorField = colorInputs.textField;
     this.colorField.addEventListener("change", (event: any) => {
@@ -116,14 +111,14 @@ export default class CubicModelRendererEditor {
     });
     this.colorPicker.disabled = true;
 
-    let opacityRow = SupClient.table.appendRow(tbody, "Opacity", { checkbox: true } );
+    const opacityRow = SupClient.table.appendRow(tbody, "Opacity", { checkbox: true } );
     this.overrideOpacityField = opacityRow.checkbox;
     this.overrideOpacityField.checked = config.overrideOpacity;
     this.overrideOpacityField.addEventListener("change", (event: any) => {
       this.editConfig("setProperty", "overrideOpacity", event.target.checked);
     });
 
-    let opacityParent = document.createElement("div");
+    const opacityParent = document.createElement("div");
     opacityParent.style.display = "flex";
     opacityParent.style.alignItems = "center";
     opacityRow.valueCell.appendChild(opacityParent);
@@ -132,7 +127,7 @@ export default class CubicModelRendererEditor {
     this.transparentField.style.width = "50%";
     this.transparentField.style.borderRight = "1px solid #ccc";
     this.transparentField.addEventListener("change", (event: any) => {
-      let opacity = (event.target.checked) ? 1 : null;
+      const opacity = (event.target.checked) ? 1 : null;
       this.editConfig("setProperty", "opacity", opacity);
     });
     this.transparentField.disabled = !config.overrideOpacity;
@@ -144,30 +139,28 @@ export default class CubicModelRendererEditor {
     this.opacityField.step = "0.1";
     this.opacityField.disabled = !config.overrideOpacity;
 
-    let materialRow = SupClient.table.appendRow(tbody, "Material");
+    const materialRow = SupClient.table.appendRow(tbody, "Material");
     this.materialSelectBox = SupClient.table.appendSelectBox(materialRow.valueCell, { "basic": "Basic", "phong": "Phong", "shader": "Shader" }, config.materialType);
     this.materialSelectBox.addEventListener("change", (event: any) => {
       this.editConfig("setProperty", "materialType", event.target.value);
     })
     this.materialSelectBox.disabled = true;
 
-    let shaderRow = SupClient.table.appendRow(tbody, "Shader");
-    let shaderFields = SupClient.table.appendAssetField(shaderRow.valueCell, "");
+    const shaderRow = SupClient.table.appendRow(tbody, "Shader");
+    const shaderFields = SupClient.table.appendAssetField(shaderRow.valueCell, "");
     this.shaderTextField = shaderFields.textField;
     this.shaderTextField.addEventListener("input", this._onChangeShaderAsset);
     this.shaderTextField.disabled = true;
     this.shaderButtonElt = shaderFields.buttonElt;
     this.shaderButtonElt.addEventListener("click", (event) => {
-      window.parent.postMessage({ type: "openEntry", id: this.shaderAssetId }, window.location.origin);
+      SupClient.openEntry(this.shaderAssetId);
     });
     this.shaderButtonElt.disabled = this.shaderAssetId == null;
     this._updateShaderField(config.materialType);*/
-
-    this.projectClient.subEntries(this);
   }
 
   destroy() {
-    this.projectClient.unsubEntries(this);
+    this.cubicModelFieldSubscriber.destroy();
 
     if (this.cubicModelAssetId != null) this.projectClient.unsubAsset(this.cubicModelAssetId, this);
   }
@@ -177,16 +170,15 @@ export default class CubicModelRendererEditor {
 
     switch (path) {
       case "cubicModelAssetId":
-        if (this.cubicModelAssetId != null) this.projectClient.unsubAsset(this.cubicModelAssetId, this);
+        if (this.cubicModelAssetId != null) {
+          this.projectClient.unsubAsset(this.cubicModelAssetId, this);
+          this.asset = null;
+        }
         this.cubicModelAssetId = value;
-        this.cubicModelButtonElt.disabled = this.cubicModelAssetId == null;
         // this.animationSelectBox.disabled = true;
 
-        if (this.cubicModelAssetId != null) {
-          this.cubicModelTextField.value = this.projectClient.entries.getPathFromId(this.cubicModelAssetId);
-          this.projectClient.subAsset(this.cubicModelAssetId, "cubicModel", this);
-        }
-        else this.cubicModelTextField.value = "";
+        if (this.cubicModelAssetId != null) this.projectClient.subAsset(this.cubicModelAssetId, "cubicModel", this);
+        this.cubicModelFieldSubscriber.onChangeAssetId(this.cubicModelAssetId);
         break;
 
       /*case "animationId":
@@ -244,44 +236,6 @@ export default class CubicModelRendererEditor {
   }
 
   // Network callbacks
-  onEntriesReceived(entries: SupCore.Data.Entries) {
-    this.cubicModelTextField.disabled = false;
-    // this.castShadowField.disabled = false;
-    // this.receiveShadowField.disabled = false;
-    // this.colorField.disabled = false;
-    // this.colorPicker.disabled = false;
-    // this.materialSelectBox.disabled = false;
-    // this.shaderTextField.disabled = false;
-
-    if (entries.byId[this.cubicModelAssetId] != null) {
-      this.cubicModelTextField.value = entries.getPathFromId(this.cubicModelAssetId);
-      this.projectClient.subAsset(this.cubicModelAssetId, "cubicModel", this);
-    }
-
-    /*if (entries.byId[this.shaderAssetId] != null) {
-      this.shaderTextField.value = entries.getPathFromId(this.shaderAssetId);
-    }*/
-  }
-
-  onEntryAdded(entry: any, parentId: string, index: number) { /* Nothing to do here */ }
-  onEntryMoved(id: string, parentId: string, index: number) {
-    if (id === this.cubicModelAssetId) {
-      this.cubicModelTextField.value = this.projectClient.entries.getPathFromId(this.cubicModelAssetId);
-    } else if (id === this.shaderAssetId) {
-      // this.shaderTextField.value = this.projectClient.entries.getPathFromId(this.shaderAssetId);
-    }
-  }
-  onSetEntryProperty(id: string, key: string, value: any) {
-    if (key !== "name") return;
-
-    if (id === this.cubicModelAssetId) {
-      this.cubicModelTextField.value = this.projectClient.entries.getPathFromId(this.cubicModelAssetId);
-    } else if (id === this.shaderAssetId) {
-      // this.shaderTextField.value = this.projectClient.entries.getPathFromId(this.shaderAssetId);
-    }
-  }
-  onEntryTrashed(id: string) { /* Nothing to do here */ }
-
   onAssetReceived(assetId: string, asset: any) {
     if (assetId !== this.cubicModelAssetId) return;
     this.asset = asset;
@@ -289,7 +243,7 @@ export default class CubicModelRendererEditor {
     /*
     this._clearAnimations();
 
-    for (let animation of this.asset.pub.animations) {
+    for (const animation of this.asset.pub.animations) {
       SupClient.table.appendSelectOption(this.animationSelectBox, animation.id, animation.name);
     }
 
@@ -301,11 +255,11 @@ export default class CubicModelRendererEditor {
     if (assetId !== this.cubicModelAssetId) return;
     if (command.indexOf("Animation") === -1) return;
 
-    /*let animationId = this.animationSelectBox.value;
+    /*const animationId = this.animationSelectBox.value;
 
     this._clearAnimations();
 
-    for (let animation of this.asset.pub.animations) {
+    for (const animation of this.asset.pub.animations) {
       SupClient.table.appendSelectOption(this.animationSelectBox, animation.id, animation.name);
     }
 
@@ -314,9 +268,9 @@ export default class CubicModelRendererEditor {
   }
 
   onAssetTrashed() {
+    this.asset = null;
     this.clearAnimations();
 
-    this.cubicModelTextField.value = "";
     // this.animationSelectBox.value = "";
     // this.animationSelectBox.disabled = true;
   }
@@ -324,42 +278,28 @@ export default class CubicModelRendererEditor {
   // User interface
   private clearAnimations() {
     /*while (true) {
-      let child = this.animationSelectBox.children[1];
+      const child = this.animationSelectBox.children[1];
       if (child == null) break;
       this.animationSelectBox.removeChild(child);
     }*/
   }
 
   // private updateShaderField(materialType: string) {
-    // let shaderRow = this.shaderTextField.parentElement.parentElement.parentElement;
+    // const shaderRow = this.shaderTextField.parentElement.parentElement.parentElement;
     // if (materialType === "shader") {
     //   if (shaderRow.parentElement == null) this.tbody.appendChild(shaderRow);
     // } else if (shaderRow.parentElement != null) shaderRow.parentElement.removeChild(shaderRow);
   // }
 
-  private onChangeCubicModelAsset = (event: any) => {
-    if (event.target.value === "") {
-      this.editConfig("setProperty", "cubicModelAssetId", null);
-      // this.editConfig("setProperty", "animationId", null);
-    }
-    else {
-      let entry = SupClient.findEntryByPath(this.projectClient.entries.pub, event.target.value);
-      if (entry != null && entry.type === "cubicModel") {
-        this.editConfig("setProperty", "cubicModelAssetId", entry.id);
-        // this.editConfig("setProperty", "animationId", null);
-      }
-    }
-  };
-
   // private onChangeCubicModelAnimation = (event: any) => {
-  //   let animationId = (event.target.value === "") ? null : event.target.value;
+  //   const animationId = (event.target.value === "") ? null : event.target.value;
   //   this.editConfig("setProperty", "animationId", animationId);
   // };
 
   // private onChangeShaderAsset = (event: any) => {
   //   if (event.target.value === "") this.editConfig("setProperty", "shaderAssetId", null);
   //   else {
-  //     let entry = SupClient.findEntryByPath(this.projectClient.entries.pub, event.target.value);
+  //     const entry = SupClient.findEntryByPath(this.projectClient.entries.pub, event.target.value);
   //     if (entry != null && entry.type === "shader") this.editConfig("setProperty", "shaderAssetId", entry.id);
   //   }
   // };

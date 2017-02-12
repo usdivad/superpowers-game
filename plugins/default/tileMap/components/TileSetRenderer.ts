@@ -1,4 +1,4 @@
-let THREE = SupEngine.THREE;
+const THREE = SupEngine.THREE;
 import TileSet from "./TileSet";
 import TileSetRendererUpdater from "./TileSetRendererUpdater";
 
@@ -8,6 +8,8 @@ export default class TileSetRenderer extends SupEngine.ActorComponent {
   /* tslint:enable:variable-name */
 
   asset: TileSet;
+
+  private material = new THREE.MeshBasicMaterial({ alphaTest: 0.1, side: THREE.DoubleSide, transparent: true });
   mesh: THREE.Mesh;
   gridRenderer: any;
   selectedTileActor: SupEngine.Actor;
@@ -15,7 +17,7 @@ export default class TileSetRenderer extends SupEngine.ActorComponent {
   constructor(actor: SupEngine.Actor, asset?: TileSet) {
     super(actor, "TileSetRenderer");
 
-    let gridActor = new SupEngine.Actor(this.actor.gameInstance, "Grid");
+    const gridActor = new SupEngine.Actor(this.actor.gameInstance, "Grid");
     gridActor.setLocalPosition(new THREE.Vector3(0, 0, 1));
     this.gridRenderer = new SupEngine.editorComponentClasses["GridRenderer"](gridActor, {
       width: 1, height: 1,
@@ -24,9 +26,7 @@ export default class TileSetRenderer extends SupEngine.ActorComponent {
     });
 
     this.selectedTileActor = new SupEngine.Actor(this.actor.gameInstance, "Selection", null, { visible: false });
-    /* tslint:disable:no-unused-expression */
     new SupEngine.editorComponentClasses["FlatColorRenderer"](this.selectedTileActor, 0x900090, 1, 1);
-    /* tslint:enable:no-unused-expression */
 
     this.setTileSet(asset);
   }
@@ -36,28 +36,30 @@ export default class TileSetRenderer extends SupEngine.ActorComponent {
     this.asset = asset;
     if (this.asset == null) return;
 
-    let geometry = new THREE.PlaneBufferGeometry(asset.data.texture.image.width, asset.data.texture.image.height);
-    let material = new THREE.MeshBasicMaterial({ map: asset.data.texture, alphaTest: 0.1, side: THREE.DoubleSide });
+    const geometry = new THREE.PlaneBufferGeometry(asset.data.texture.image.width, asset.data.texture.image.height);
+    this.material.map = asset.data.texture;
 
-    this.mesh = new THREE.Mesh(geometry, material);
+    this.mesh = new THREE.Mesh(geometry, this.material);
     this.actor.threeObject.add(this.mesh);
     this.refreshScaleRatio();
     this.selectedTileActor.threeObject.visible = true;
   }
 
   select(x: number, y: number, width = 1, height = 1) {
-    let ratio = this.asset.data.grid.width / this.asset.data.grid.height;
+    const ratio = this.asset.data.grid.width / this.asset.data.grid.height;
     this.selectedTileActor.setLocalPosition(new THREE.Vector3(x, -y / ratio, 2));
     this.selectedTileActor.setLocalScale(new THREE.Vector3(width, -height / ratio, 1));
   }
 
   refreshScaleRatio() {
-    let scaleX = 1 / this.asset.data.grid.width;
-    let scaleY = 1 / this.asset.data.grid.height;
-    this.mesh.scale.set(scaleX, scaleY, 1);
-    let material = <THREE.MeshBasicMaterial>this.mesh.material;
-    this.mesh.position.setX(material.map.image.width / 2 * scaleX);
-    this.mesh.position.setY(-material.map.image.height / 2 * scaleY);
+    const scaleX = 1 / this.asset.data.grid.width;
+    const scaleY = 1 / this.asset.data.grid.height;
+    const scale = Math.max(scaleX, scaleY);
+
+    this.mesh.scale.set(scale, scale, 1);
+    const material = <THREE.MeshBasicMaterial>this.mesh.material;
+    this.mesh.position.setX(material.map.image.width / 2 * scale);
+    this.mesh.position.setY(-material.map.image.height / 2 * scale);
     this.mesh.updateMatrixWorld(false);
 
     this.select(0, 0);

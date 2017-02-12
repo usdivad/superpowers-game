@@ -1,6 +1,9 @@
-import { data, scheduleErrorCheck, setNextCompletion } from "./network";
+import ScriptAsset from "../../data/ScriptAsset";
+import { data, scheduleErrorCheck, setNextCompletion, updateWorkerFile } from "./network";
 
-let ui: {
+const ui: {
+  selectedRevision: string;
+
   editor: TextEditorWidget;
   previousLine: number;
 
@@ -27,12 +30,15 @@ let ui: {
 } = {} as any;
 export default ui;
 
+ui.selectedRevision = "current";
+
 let defaultPosition: CodeMirror.Position;
 window.addEventListener("message", (event) => {
-  if (event.data.type === "activate") ui.editor.codeMirrorInstance.focus();
-  if (event.data.type === "setState") {
-    let line = parseInt(event.data.state.line, 10);
-    let ch = parseInt(event.data.state.ch, 10);
+  if (event.data.type === "setRevision") onSelectRevision(event.data.revisionId);
+  else if (event.data.type === "activate") ui.editor.codeMirrorInstance.focus();
+  else if (event.data.type === "setState") {
+    const line = parseInt(event.data.state.line, 10);
+    const ch = parseInt(event.data.state.ch, 10);
     if (ui.editor != null) ui.editor.codeMirrorInstance.getDoc().setCursor({ line , ch });
     else defaultPosition = { line, ch };
   }
@@ -43,15 +49,15 @@ ui.parameterElement = <HTMLDivElement>document.querySelector(".popup-parameter")
 ui.parameterElement.parentElement.removeChild(ui.parameterElement);
 ui.parameterElement.style.display = "";
 
-let parameterPopupKeyMap = {
+const parameterPopupKeyMap = {
   "Esc": () => { clearParameterPopup(); },
   "Up": () => { updateParameterHint(ui.selectedSignatureIndex - 1); },
   "Down": () => { updateParameterHint(ui.selectedSignatureIndex + 1); },
   "Enter": () => {
-    let selectedSignature = ui.signatureTexts[ui.selectedSignatureIndex];
+    const selectedSignature = ui.signatureTexts[ui.selectedSignatureIndex];
     if (selectedSignature.parameters.length === 0) return;
 
-    let cursorPosition = ui.editor.codeMirrorInstance.getDoc().getCursor();
+    const cursorPosition = ui.editor.codeMirrorInstance.getDoc().getCursor();
     let text = "";
 
     for (let parameterIndex = 0; parameterIndex < selectedSignature.parameters.length; parameterIndex++) {
@@ -59,27 +65,47 @@ let parameterPopupKeyMap = {
       text += selectedSignature.parameters[parameterIndex];
     }
     ui.editor.codeMirrorInstance.getDoc().replaceRange(text, cursorPosition, null);
-    let endSelection = { line: cursorPosition.line, ch: cursorPosition.ch + selectedSignature.parameters[0].length };
+    const endSelection = { line: cursorPosition.line, ch: cursorPosition.ch + selectedSignature.parameters[0].length };
     ui.editor.codeMirrorInstance.getDoc().setSelection(cursorPosition, endSelection);
   },
   "Tab": () => {
-    let selectedSignature = ui.signatureTexts[ui.selectedSignatureIndex];
+    const selectedSignature = ui.signatureTexts[ui.selectedSignatureIndex];
     if (selectedSignature.parameters.length === 0) return;
     if (ui.selectedArgumentIndex === selectedSignature.parameters.length - 1) return;
 
-    let cursorPosition = ui.editor.codeMirrorInstance.getDoc().getCursor();
+    const cursorPosition = ui.editor.codeMirrorInstance.getDoc().getCursor();
 
     cursorPosition.ch += 2;
-    let endSelection = { line: cursorPosition.line, ch: cursorPosition.ch + selectedSignature.parameters[ui.selectedArgumentIndex + 1].length };
+    const endSelection = { line: cursorPosition.line, ch: cursorPosition.ch + selectedSignature.parameters[ui.selectedArgumentIndex + 1].length };
     ui.editor.codeMirrorInstance.getDoc().setSelection(cursorPosition, endSelection);
   }
 };
 
-// Setup editor
-export function setupEditor(clientId: number, script: string) {
-  SupClient.setupHotkeys();
+export function clear() {
+  (document.querySelector(".loading") as HTMLDivElement).hidden = false;
+  (document.querySelector(".text-editor-container") as HTMLDivElement).hidden = true;
 
-  let textArea = <HTMLTextAreaElement>document.querySelector(".text-editor");
+  ui.editor.setText("");
+  ui.errorPaneInfo.textContent = SupClient.i18n.t("common:states.loading");
+  ui.errorPaneStatus.classList.toggle("has-draft", false);
+  ui.errorPaneStatus.classList.toggle("has-errors", false);
+  clearErrors();
+}
+
+export function start(asset: ScriptAsset) {
+  (document.querySelector(".loading") as HTMLDivElement).hidden = true;
+  (document.querySelector(".text-editor-container") as HTMLDivElement).hidden = false;
+
+  ui.editor.setText(asset.pub.draft);
+  ui.errorPaneStatus.classList.toggle("has-draft", asset.hasDraft && ui.selectedRevision === "current");
+
+  if (ui.selectedRevision !== "current") ui.editor.codeMirrorInstance.setOption("readOnly", true);
+  else if (defaultPosition != null) ui.editor.codeMirrorInstance.getDoc().setCursor(defaultPosition);
+}
+
+// Setup editor
+export function setupEditor(clientId: string) {
+  const textArea = document.querySelector(".text-editor") as HTMLTextAreaElement;
   ui.editor = new TextEditorWidget(data.projectClient, clientId, textArea, {
     mode: "text/typescript",
     extraKeys: {
@@ -98,8 +124,8 @@ export function setupEditor(clientId: number, script: string) {
       "Shift-Ctrl-F": () => { onGlobalSearch(); },
       "Shift-Cmd-F": () => { onGlobalSearch(); },
       "F8": () => {
-        let cursor = ui.editor.codeMirrorInstance.getDoc().getCursor();
-        let token = ui.editor.codeMirrorInstance.getTokenAt(cursor);
+        const cursor = ui.editor.codeMirrorInstance.getDoc().getCursor();
+        const token = ui.editor.codeMirrorInstance.getTokenAt(cursor);
         if (token.string === ".") token.start = token.end;
 
         let start = 0;
@@ -114,7 +140,9 @@ export function setupEditor(clientId: number, script: string) {
       }
     },
     editCallback: onEditText,
-    sendOperationCallback: (operation: OperationData) => { data.projectClient.editAsset(SupClient.query.asset, "editText", operation, data.asset.document.getRevisionId()); }
+    sendOperationCallback: (operation: OperationData) => {
+      data.projectClient.editAsset(SupClient.query.asset, "editText", operation, data.asset.document.getRevisionId());
+    }
   });
   ui.previousLine = -1;
 
@@ -138,7 +166,7 @@ export function setupEditor(clientId: number, script: string) {
   });
 
   (<any>ui.editor.codeMirrorInstance).on("cursorActivity", () => {
-    let currentLine = ui.editor.codeMirrorInstance.getDoc().getCursor().line;
+    const currentLine = ui.editor.codeMirrorInstance.getDoc().getCursor().line;
     if (Math.abs(currentLine - ui.previousLine) >= 1) clearParameterPopup();
     else if (ui.parameterElement.parentElement != null) scheduleParameterHint();
     ui.previousLine = currentLine;
@@ -148,15 +176,13 @@ export function setupEditor(clientId: number, script: string) {
     ui.completionOpened = false;
     if (ui.parameterElement.parentElement != null) ui.editor.codeMirrorInstance.addKeyMap(parameterPopupKeyMap);
   });
-
-  ui.editor.setText(script);
-  if (defaultPosition != null) ui.editor.codeMirrorInstance.getDoc().setCursor(defaultPosition);
 }
+
 
 let localVersionNumber = 0;
 function onEditText(text: string, origin: string) {
-  let localFileName = data.fileNamesByScriptId[SupClient.query.asset];
-  let localFile = data.files[localFileName];
+  const localFileName = data.fileNamesByScriptId[SupClient.query.asset];
+  const localFile = data.files[localFileName];
   localFile.text = text;
   localVersionNumber++;
   localFile.version = `l${localVersionNumber}`;
@@ -168,14 +194,34 @@ function onEditText(text: string, origin: string) {
   }
 }
 
+function onSelectRevision(revisionId: string) {
+  if (revisionId === "restored") {
+    ui.selectedRevision = "current";
+    ui.editor.codeMirrorInstance.setOption("readOnly", false);
+    return;
+  }
 
+  ui.selectedRevision = revisionId;
+  clear();
+
+  if (ui.selectedRevision === "current") {
+    data.asset = data.assetsById[SupClient.query.asset] as ScriptAsset;
+    start(data.asset);
+    updateWorkerFile(SupClient.query.asset, data.asset.pub.draft, data.asset.pub.revisionId.toString());
+  } else {
+    data.projectClient.getAssetRevision(SupClient.query.asset, "script", ui.selectedRevision, (id: string, asset: ScriptAsset) => {
+      start(asset);
+      updateWorkerFile(SupClient.query.asset, asset.pub.draft, `l${localVersionNumber}`);
+    });
+  }
+}
 
 // Error pane
 ui.errorPane = <HTMLDivElement>document.querySelector(".error-pane");
 ui.errorPaneStatus = <HTMLDivElement>ui.errorPane.querySelector(".header");
 ui.errorPaneInfo = <HTMLDivElement>ui.errorPaneStatus.querySelector(".info");
 
-let errorsContent = ui.errorPane.querySelector(".content") as HTMLDivElement;
+const errorsContent = ui.errorPane.querySelector(".content") as HTMLDivElement;
 ui.errorsTBody = <HTMLTableSectionElement>errorsContent.querySelector("tbody");
 ui.errorsTBody.addEventListener("click", onErrorTBodyClick);
 
@@ -186,16 +232,21 @@ interface CompilationError {
   message: string;
 }
 
+function clearErrors() {
+  ui.editor.codeMirrorInstance.operation(() => {
+    // Remove all previous errors
+    for (const textMarker of ui.editor.codeMirrorInstance.getDoc().getAllMarks()) {
+      if ((<any>textMarker).className !== "line-error") continue;
+      textMarker.clear();
+    }
+
+    ui.editor.codeMirrorInstance.clearGutter("line-error-gutter");
+    ui.errorsTBody.innerHTML = "";
+  });
+}
+
 export function refreshErrors(errors: CompilationError[]) {
-  // Remove all previous errors
-  for (let textMarker of ui.editor.codeMirrorInstance.getDoc().getAllMarks()) {
-    if ((<any>textMarker).className !== "line-error") continue;
-    textMarker.clear();
-  }
-
-  ui.editor.codeMirrorInstance.clearGutter("line-error-gutter");
-
-  ui.errorsTBody.innerHTML = "";
+  clearErrors();
 
   ui.saveButton.hidden = false;
   ui.saveWithErrorsButton.hidden = true;
@@ -212,62 +263,64 @@ export function refreshErrors(errors: CompilationError[]) {
   let lastSelfErrorRow: HTMLTableRowElement = null;
 
   // Display new ones
-  for (let error of errors) {
-    let errorRow = document.createElement("tr");
+  ui.editor.codeMirrorInstance.operation(() => {
+    for (const error of errors) {
+      const errorRow = document.createElement("tr");
 
-    errorRow.dataset["line"] = error.position.line.toString();
-    errorRow.dataset["character"] = error.position.character.toString();
+      errorRow.dataset["line"] = error.position.line.toString();
+      errorRow.dataset["character"] = error.position.character.toString();
 
-    let positionCell = document.createElement("td");
-    positionCell.textContent = (error.position.line + 1).toString();
-    errorRow.appendChild(positionCell);
+      const positionCell = document.createElement("td");
+      positionCell.textContent = (error.position.line + 1).toString();
+      errorRow.appendChild(positionCell);
 
-    let messageCell = document.createElement("td");
-    messageCell.textContent = error.message;
-    errorRow.appendChild(messageCell);
+      const messageCell = document.createElement("td");
+      messageCell.textContent = error.message;
+      errorRow.appendChild(messageCell);
 
-    let scriptCell = document.createElement("td");
-    errorRow.appendChild(scriptCell);
-    if (error.file !== "") {
-      errorRow.dataset["assetId"] = data.files[error.file].id;
-      scriptCell.textContent = error.file.substring(0, error.file.length - 3);
-    } else scriptCell.textContent = "Internal";
+      const scriptCell = document.createElement("td");
+      errorRow.appendChild(scriptCell);
+      if (error.file !== "") {
+        errorRow.dataset["assetId"] = data.files[error.file].id;
+        scriptCell.textContent = error.file.substring(0, error.file.length - 3);
+      } else scriptCell.textContent = "Internal";
 
-    if (error.file !== data.fileNamesByScriptId[SupClient.query.asset]) {
-      ui.errorsTBody.appendChild(errorRow);
-      continue;
+      if (error.file !== data.fileNamesByScriptId[SupClient.query.asset]) {
+        ui.errorsTBody.appendChild(errorRow);
+        continue;
+      }
+
+      ui.errorsTBody.insertBefore(errorRow, (lastSelfErrorRow != null) ? lastSelfErrorRow.nextElementSibling : ui.errorsTBody.firstChild);
+      lastSelfErrorRow = errorRow;
+      selfErrorsCount++;
+
+      const line = error.position.line;
+      ui.editor.codeMirrorInstance.getDoc().markText(
+        { line , ch: error.position.character },
+        { line, ch: error.position.character + error.length },
+        { className: "line-error" }
+      );
+
+      const gutter = document.createElement("div");
+      gutter.className = "line-error-gutter";
+      gutter.innerHTML = "●";
+      ui.editor.codeMirrorInstance.setGutterMarker(line, "line-error-gutter", gutter);
     }
+    const otherErrorsCount = errors.length - selfErrorsCount;
 
-    ui.errorsTBody.insertBefore(errorRow, (lastSelfErrorRow != null) ? lastSelfErrorRow.nextElementSibling : ui.errorsTBody.firstChild);
-    lastSelfErrorRow = errorRow;
-    selfErrorsCount++;
+    const selfErrorsValue = SupClient.i18n.t(`scriptEditor:errors.${selfErrorsCount > 1 ? "severalErrors" : "oneError"}`, { errors: selfErrorsCount.toString() });
+    const selfErrors = SupClient.i18n.t("scriptEditor:errors.selfErrorsInfo", { errors: selfErrorsValue.toString() });
+    const otherErrorsValue = SupClient.i18n.t(`scriptEditor:errors.${otherErrorsCount > 1 ? "severalErrors" : "oneError"}`, { errors: otherErrorsCount.toString() });
+    const otherErrors = SupClient.i18n.t("scriptEditor:errors.otherErrorsInfo", { errors: otherErrorsValue.toString() });
 
-    let line = error.position.line;
-    ui.editor.codeMirrorInstance.getDoc().markText(
-      { line , ch: error.position.character },
-      { line, ch: error.position.character + error.length },
-      { className: "line-error" }
-    );
+    if (selfErrorsCount > 0) {
+      ui.saveButton.hidden = true;
+      ui.saveWithErrorsButton.hidden = false;
 
-    let gutter = document.createElement("div");
-    gutter.className = "line-error-gutter";
-    gutter.innerHTML = "●";
-    ui.editor.codeMirrorInstance.setGutterMarker(line, "line-error-gutter", gutter);
-  }
-  let otherErrorsCount = errors.length - selfErrorsCount;
-
-  let selfErrorsValue = SupClient.i18n.t(`scriptEditor:errors.${selfErrorsCount > 1 ? "severalErrors" : "oneError"}`, { errors: selfErrorsCount.toString() });
-  let selfErrors = SupClient.i18n.t("scriptEditor:errors.selfErrorsInfo", { errors: selfErrorsValue.toString() });
-  let otherErrorsValue = SupClient.i18n.t(`scriptEditor:errors.${otherErrorsCount > 1 ? "severalErrors" : "oneError"}`, { errors: otherErrorsCount.toString() });
-  let otherErrors = SupClient.i18n.t("scriptEditor:errors.otherErrorsInfo", { errors: otherErrorsValue.toString() });
-
-  if (selfErrorsCount > 0) {
-    ui.saveButton.hidden = true;
-    ui.saveWithErrorsButton.hidden = false;
-
-    if (otherErrorsCount === 0) ui.errorPaneInfo.textContent = selfErrors;
-    else ui.errorPaneInfo.textContent = SupClient.i18n.t("scriptEditor:errors.bothErrorsInfo", { selfErrors, otherErrors });
-  } else ui.errorPaneInfo.textContent = otherErrors;
+      if (otherErrorsCount === 0) ui.errorPaneInfo.textContent = selfErrors;
+      else ui.errorPaneInfo.textContent = SupClient.i18n.t("scriptEditor:errors.bothErrorsInfo", { selfErrors, otherErrors });
+    } else ui.errorPaneInfo.textContent = otherErrors;
+  });
 }
 
 function onErrorTBodyClick(event: MouseEvent) {
@@ -278,17 +331,17 @@ function onErrorTBodyClick(event: MouseEvent) {
     target = target.parentElement;
   }
 
-  let assetId = target.dataset["assetId"];
+  const assetId = target.dataset["assetId"];
   if (assetId == null) return;
 
-  let line = target.dataset["line"];
-  let character = target.dataset["character"];
+  const line = target.dataset["line"];
+  const character = target.dataset["character"];
 
   if (assetId === SupClient.query.asset) {
     ui.editor.codeMirrorInstance.getDoc().setCursor({ line: parseInt(line, 10), ch: parseInt(character, 10) });
     ui.editor.codeMirrorInstance.focus();
   } else {
-    if (window.parent != null) window.parent.postMessage({ type: "openEntry", id: assetId, state: { line, ch: character } }, window.location.origin);
+    if (window.parent != null) SupClient.openEntry(assetId, { line, ch: character });
   }
 }
 
@@ -316,9 +369,7 @@ function applyDraftChanges(options: { ignoreErrors: boolean }) {
 
   data.projectClient.editAssetNoErrorHandling(SupClient.query.asset, "applyDraftChanges", options, (err: string) => {
     if (err != null && err !== "foundSelfErrors") {
-      /* tslint:disable:no-unused-expression */
       new SupClient.Dialogs.InfoDialog(err);
-      /* tslint:enable:no-unused-expression */
       SupClient.onDisconnected();
       return;
     }
@@ -369,15 +420,13 @@ function clearInfoPopup() {
   if (ui.infoTimeout != null) clearTimeout(ui.infoTimeout);
 }
 
-
-
 export function showParameterPopup(texts: { prefix: string; parameters: string[]; suffix: string; }[], selectedItemIndex: number, selectedArgumentIndex: number) {
   ui.signatureTexts = texts;
   ui.selectedArgumentIndex = selectedArgumentIndex;
   updateParameterHint(selectedItemIndex);
 
-  let position = ui.editor.codeMirrorInstance.getDoc().getCursor();
-  let coordinates  = ui.editor.codeMirrorInstance.cursorCoords(position, "page");
+  const position = ui.editor.codeMirrorInstance.getDoc().getCursor();
+  const coordinates  = ui.editor.codeMirrorInstance.cursorCoords(position, "page");
 
   ui.parameterElement.style.top = `${Math.round(coordinates.top - 30)}px`;
   ui.parameterElement.style.left = `${coordinates.left}px`;
@@ -392,7 +441,7 @@ function updateParameterHint(index: number) {
   ui.selectedSignatureIndex = index;
   ui.parameterElement.querySelector(".item").textContent = `(${index + 1}/${ui.signatureTexts.length})`;
 
-  let text = ui.signatureTexts[index];
+  const text = ui.signatureTexts[index];
   let prefix = text.prefix;
   let parameter = "";
   let suffix = "";
@@ -429,8 +478,8 @@ function scheduleParameterHint() {
   if (ui.parameterTimeout != null) clearTimeout(ui.parameterTimeout);
 
   ui.parameterTimeout = window.setTimeout(() => {
-    let cursor = ui.editor.codeMirrorInstance.getDoc().getCursor();
-    let token = ui.editor.codeMirrorInstance.getTokenAt(cursor);
+    const cursor = ui.editor.codeMirrorInstance.getDoc().getCursor();
+    const token = ui.editor.codeMirrorInstance.getTokenAt(cursor);
     if (token.string === ".") token.start = token.end;
 
     let start = 0;
@@ -448,8 +497,8 @@ function scheduleParameterHint() {
 }
 
 function hint(instance: any, callback: any) {
-  let cursor = ui.editor.codeMirrorInstance.getDoc().getCursor();
-  let token = ui.editor.codeMirrorInstance.getTokenAt(cursor);
+  const cursor = ui.editor.codeMirrorInstance.getDoc().getCursor();
+  const token = ui.editor.codeMirrorInstance.getTokenAt(cursor);
   if (token.string === ".") token.start = token.end;
 
   let start = 0;
@@ -460,7 +509,7 @@ function hint(instance: any, callback: any) {
 }
 (<any>hint).async = true;
 
-let hintCustomKeys = {
+const hintCustomKeys = {
   "Up": (cm: any, commands: any) => { commands.moveFocus(-1); },
   "Down": (cm: any, commands: any) => { commands.moveFocus(1); },
   "Enter": (cm: any, commands: any) => { commands.pick(); },
@@ -487,15 +536,13 @@ function onGlobalSearch() {
     return;
   }
 
-  let options = {
+  const options = {
     placeholder: SupClient.i18n.t("scriptEditor:globalSearch.placeholder"),
     initialValue: ui.editor.codeMirrorInstance.getDoc().getSelection(),
     validationLabel: SupClient.i18n.t("common:actions.search")
   };
 
-  /* tslint:disable:no-unused-expression */
   new SupClient.Dialogs.PromptDialog(SupClient.i18n.t("scriptEditor:globalSearch.prompt"), options, (text) => {
-    /* tslint:enable:no-unused-expression */
     if (text == null) {
       ui.editor.codeMirrorInstance.focus();
       return;

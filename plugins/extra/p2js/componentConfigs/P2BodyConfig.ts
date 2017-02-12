@@ -1,4 +1,4 @@
-interface P2BodyConfigPub {
+export interface P2BodyConfigPub {
   formatVersion: number;
 
   mass: number;
@@ -8,6 +8,7 @@ interface P2BodyConfigPub {
   shape: string;
   width: number;
   height: number;
+  angle: number;
   radius: number;
   length: number;
 }
@@ -24,11 +25,12 @@ export default class P2BodyConfig extends SupCore.Data.Base.ComponentConfig {
     shape: { type: "enum", items: [ "box", "circle" ], mutable: true },
     width: { type: "number", min: 0, mutable: true },
     height: { type: "number", min: 0, mutable: true },
+    angle: { type: "number", min: -360, max: 360, mutable: true },
     radius: { type: "number", min: 0, mutable: true }
   };
 
   static create() {
-    let emptyConfig: P2BodyConfigPub = {
+    const emptyConfig: P2BodyConfigPub = {
       formatVersion: P2BodyConfig.currentFormatVersion,
 
       mass: 0,
@@ -38,13 +40,14 @@ export default class P2BodyConfig extends SupCore.Data.Base.ComponentConfig {
       shape: "box",
       width: 1,
       height: 1,
+      angle: 0,
       radius: 1,
       length: 1
     };
     return emptyConfig;
   }
 
-  static currentFormatVersion = 1;
+  static currentFormatVersion = 2;
   static migrate(pub: P2BodyConfigPub) {
     if (pub.formatVersion === P2BodyConfig.currentFormatVersion) return false;
 
@@ -53,6 +56,12 @@ export default class P2BodyConfig extends SupCore.Data.Base.ComponentConfig {
 
       // NOTE: "rectangle" was renamed to "box" in p2.js v0.7
       if (pub.shape === "rectangle") pub.shape = "box";
+    }
+
+    if (pub.formatVersion === 1) {
+      pub.formatVersion = 2;
+
+      pub.angle = 0;
     }
 
     return true;

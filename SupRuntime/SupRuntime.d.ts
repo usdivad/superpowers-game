@@ -1,4 +1,3 @@
-/// <reference path="../../../typings/tsd.d.ts" />
 /// <reference path="../SupEngine/SupEngine.d.ts" />
 
 declare namespace SupRuntime {
@@ -15,8 +14,8 @@ declare namespace SupRuntime {
     loadResource(player: Player, resourceName: string, callback: (err: Error, resource?: any) => any): void;
   }
 
-  export let plugins: { [name: string]: RuntimePlugin };
-  export let resourcePlugins: { [name: string]: RuntimeResourcePlugin };
+  export const plugins: { [name: string]: RuntimePlugin };
+  export const resourcePlugins: { [name: string]: RuntimeResourcePlugin };
   export function registerPlugin(name: string, plugin: RuntimePlugin): void;
   export function registerResource(name: string, plugin: RuntimeResourcePlugin): void;
 
